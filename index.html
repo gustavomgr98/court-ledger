@@ -535,6 +535,7 @@
         <div id="cmpTableBlendedWrap"></div>
 
         <div id="cmpInsights"></div>
+        <button class="ghost" style="margin-top:12px;" onclick="askKobeAboutMatchup()">🏀 Pedir ao Kobe uma leitura completa</button>
 
         <div class="note">
           Modelo ilustrativo tipo Elo/logístico aplicado à diferença do Rating Ofensivo composto
@@ -603,6 +604,7 @@
       </div>
       <div class="kobe-panel-footer">
         <input id="chatInput" placeholder="Pergunta ao Kobe…" onkeydown="if(event.key==='Enter') sendChatMessage();">
+        <button class="ghost" id="micBtn" onclick="toggleVoiceInput()" title="Falar" style="flex-shrink:0; padding:8px 11px;">🎤</button>
         <button class="primary" onclick="sendChatMessage()">Enviar</button>
       </div>
     </div>
@@ -1027,6 +1029,7 @@ async function renderComparison(){
   ]);
   const ra = allRatings.find(d=>d.team_code===a) || null;
   const rb = allRatings.find(d=>d.team_code===b) || null;
+  LAST_RATINGS = {a: ra, b: rb, teamA: a, teamB: b};
   const league = computeLeagueAverages(allRatings);
 
   renderBlendedTable(a, b, ra, rb);
@@ -1077,6 +1080,7 @@ async function renderComparison(){
 
 let LAST_WINPROB = null;
 let LAST_FORM = null;
+let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
 
 async function onTeamsChanged(){
@@ -1741,6 +1745,97 @@ function addChatBubble(role, text, isLoading){
 
 function toggleKobe(){
   document.getElementById('kobePanel').classList.toggle('open');
+}
+
+let voiceRecognition = null;
+let isListening = false;
+
+function toggleVoiceInput(){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    alert('O teu browser não suporta entrada por voz. Tenta no Chrome ou Safari mais recente.');
+    return;
+  }
+  const micBtn = document.getElementById('micBtn');
+
+  if(isListening){
+    voiceRecognition.stop();
+    return;
+  }
+
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.lang = 'pt-PT';
+  voiceRecognition.interimResults = false;
+  voiceRecognition.maxAlternatives = 1;
+
+  voiceRecognition.onstart = () => {
+    isListening = true;
+    micBtn.textContent = '🔴';
+    micBtn.style.borderColor = 'var(--loss)';
+  };
+  voiceRecognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    document.getElementById('chatInput').value = transcript;
+    sendChatMessage();
+  };
+  voiceRecognition.onerror = () => {
+    isListening = false;
+    micBtn.textContent = '🎤';
+    micBtn.style.borderColor = '';
+  };
+  voiceRecognition.onend = () => {
+    isListening = false;
+    micBtn.textContent = '🎤';
+    micBtn.style.borderColor = '';
+  };
+  voiceRecognition.start();
+}
+
+async function askKobeAboutMatchup(){
+  if(!LAST_RATINGS || !LAST_RATINGS.a || !LAST_RATINGS.b){
+    alert('Escolhe duas equipas na Comparação primeiro.');
+    return;
+  }
+  const {a, b} = {a: LAST_RATINGS.teamA, b: LAST_RATINGS.teamB};
+  const ra = LAST_RATINGS.a, rb = LAST_RATINGS.b;
+  const fa = LAST_FORM?.a, fb = LAST_FORM?.b;
+
+  let prompt = `Faz-me uma leitura completa e fluida (não uma lista) do confronto ${a} vs ${b}, escrita como um analista experiente falaria, usando estes números já calculados pela app:\n\n`;
+  prompt += `Rating composto: ${a}=${ra.rating} (${ra.n_from_2627}/${ra.n_players} jogadores já com jogos 26-27), ${b}=${rb.rating} (${rb.n_from_2627}/${rb.n_players}).\n`;
+  prompt += `Médias: ${a} — ${ra.avg_pts} PTS, ${ra.avg_reb} REB, ${ra.avg_ast} AST, ${(ra.avg_efg_pct*100).toFixed(1)}% eFG. ${b} — ${rb.avg_pts} PTS, ${rb.avg_reb} REB, ${rb.avg_ast} AST, ${(rb.avg_efg_pct*100).toFixed(1)}% eFG.\n`;
+  if(LAST_WINPROB) prompt += `Probabilidade de vitória do modelo: ${a} ${(LAST_WINPROB.pA*100).toFixed(1)}% vs ${b} ${(LAST_WINPROB.pB*100).toFixed(1)}%.\n`;
+  if(fa) prompt += `Forma recente ${a}: ${fa.wins}V-${fa.losses}D, sequência ${fa.results}, diferencial ponderado ${fa.weighted_margin}.\n`;
+  if(fb) prompt += `Forma recente ${b}: ${fb.wins}V-${fb.losses}D, sequência ${fb.results}, diferencial ponderado ${fb.weighted_margin}.\n`;
+  prompt += `\nEscreve 2-3 parágrafos curtos, sem repetir os números todos em lista — conta a história do confronto: quem está favorito e porquê, o ponto mais interessante, e um alerta se a amostra for pequena.`;
+
+  document.getElementById('kobePanel').classList.add('open');
+  const input = document.getElementById('chatInput');
+  input.value = '';
+  addChatBubble('user', `Leitura completa: ${a} vs ${b}`);
+  CHAT_HISTORY.push({role:'user', text: prompt});
+  const loadingEl = addChatBubble('bot', 'A analisar…', true);
+
+  try{
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/ai-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY)
+      },
+      body: JSON.stringify({ message: prompt, history: CHAT_HISTORY.slice(0,-1) })
+    });
+    const data = await resp.json();
+    loadingEl.remove();
+    if(data.error){ addChatBubble('bot', 'Erro: ' + data.error); }
+    else{
+      addChatBubble('bot', data.text || '(sem resposta)');
+      CHAT_HISTORY.push({role:'assistant', text: data.text || ''});
+    }
+  } catch(e){
+    loadingEl.remove();
+    addChatBubble('bot', 'Erro de rede: ' + e.message);
+  }
 }
 
 async function sendChatMessage(){
