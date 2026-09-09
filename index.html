@@ -121,7 +121,13 @@
     border-radius:5px; padding:9px 11px; font-family:'Inter',sans-serif; font-size:13.5px; width:100%;
     transition:border-color .15s;
   }
-  input:focus, select:focus, textarea:focus{outline:none; border-color:var(--paint);}
+  input:focus, select:focus, textarea:focus{outline:none; border-color:var(--paint); box-shadow:0 0 0 3px rgba(255,122,61,0.25);}
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid var(--teal); outline-offset:2px;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
   label{font-size:11px; color:var(--ink-dim); display:block; margin-bottom:5px; font-family:'Roboto Mono',monospace; letter-spacing:0.3px; text-transform:uppercase;}
   .field{margin-bottom:14px;}
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
