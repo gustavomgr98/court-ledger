@@ -461,6 +461,17 @@
       </div>
 
       <div class="panel">
+        <h2>Verificador de Valor</h2>
+        <div class="sub">Mete a odd real que encontraste para o mercado <b>Vencedor</b> — o único que já temos calibração histórica a validar. Compara com a probabilidade do modelo e diz se há vantagem, já a descontar a margem típica da casa (vig).</div>
+        <div class="grid2">
+          <div class="field"><label>Equipa</label><select id="valueTeamSelect"></select></div>
+          <div class="field"><label>Odd (decimal, ex: 1.90)</label><input id="valueOddInput" type="number" step="0.01" placeholder="1.90"></div>
+        </div>
+        <button class="primary" onclick="checkValue()">Verificar</button>
+        <div id="valueResultWrap" style="margin-top:16px;"></div>
+      </div>
+
+      <div class="panel">
         <h2>Campo — 5 inicial provável</h2>
         <div class="sub">Calculado a partir dos jogadores marcados como disponíveis, escolhendo o de mais minutos por posição. Desmarca um jogador como disponível (lesão, etc.) e o campo e as stats abaixo ajustam-se.</div>
         <div class="court-grid">
@@ -1104,6 +1115,61 @@ async function renderFormAndHistory(){
 
   renderTrends(a, b);
   renderMarketSummary(a, b, formA.data?.[0], formB.data?.[0], splitA.data?.[0], splitB.data?.[0]);
+  populateValueTeamSelect(a, b);
+}
+
+function populateValueTeamSelect(a, b){
+  const sel = document.getElementById('valueTeamSelect');
+  sel.innerHTML = `<option value="${a}">${a}</option><option value="${b}">${b}</option>`;
+  document.getElementById('valueResultWrap').innerHTML = '';
+}
+
+async function checkValue(){
+  const wrap = document.getElementById('valueResultWrap');
+  const team = document.getElementById('valueTeamSelect').value;
+  const odd = parseFloat(document.getElementById('valueOddInput').value);
+  if(!odd || odd <= 1){ wrap.innerHTML = '<div class="empty">Mete uma odd decimal válida (ex: 1.90).</div>'; return; }
+  if(!LAST_WINPROB){ wrap.innerHTML = '<div class="empty">Sem probabilidade do modelo disponível para este confronto.</div>'; return; }
+
+  const modelProb = (team === LAST_WINPROB.a) ? LAST_WINPROB.pA : LAST_WINPROB.pB;
+  const impliedProb = 1 / odd;
+  const edgePts = (modelProb - impliedProb) * 100;
+
+  let verdict, verdictClass;
+  if(edgePts >= 5){ verdict = 'VALOR CLARO'; verdictClass = 'strength'; }
+  else if(edgePts >= 2){ verdict = 'VALOR MARGINAL — vigia'; verdictClass = 'strength'; }
+  else if(edgePts > -2){ verdict = 'SEM VALOR — perto do justo'; verdictClass = 'weakness'; }
+  else { verdict = 'A CASA ESTÁ MAIS OTIMISTA — sem valor'; verdictClass = 'weakness'; }
+
+  const bucket = Math.max(modelProb, 1-modelProb) < 0.55 ? '50-55%'
+    : Math.max(modelProb, 1-modelProb) < 0.60 ? '55-60%'
+    : Math.max(modelProb, 1-modelProb) < 0.65 ? '60-65%'
+    : Math.max(modelProb, 1-modelProb) < 0.70 ? '65-70%' : '70%+';
+
+  let calibNote = 'Ainda sem histórico de calibração suficiente para esta faixa — trata isto como uma estimativa não validada.';
+  const {data: calib} = await sb.from('calibration_summary').select('*').eq('confidence_bucket', bucket).single();
+  if(calib && calib.n_predictions >= 10){
+    calibNote = `Histórico: quando o modelo dá confiança na faixa ${bucket}, acertou ${(calib.actual_accuracy*100).toFixed(1)}% das vezes em ${calib.n_predictions} previsões — ${calib.actual_accuracy >= (modelProb-0.05) ? 'consistente com o que o modelo diz' : 'abaixo do que o modelo promete, tem cautela extra'}.`;
+  } else if(calib){
+    calibNote = `Só ${calib.n_predictions} previsão(ões) resolvida(s) nesta faixa até agora — amostra pequena de mais para confiar no histórico.`;
+  }
+
+  wrap.innerHTML = `
+    <div class="context-grid">
+      <div class="context-card">
+        <div class="cc-team">${team}</div>
+        <div class="cc-row"><span class="cc-label">Prob. implícita pela odd</span><span class="cc-val">${(impliedProb*100).toFixed(1)}%</span></div>
+        <div class="cc-row"><span class="cc-label">Prob. do modelo</span><span class="cc-val">${(modelProb*100).toFixed(1)}%</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Diferença (edge)</span><span class="cc-val ${edgePts>=0?'':'flag'}">${edgePts>0?'+':''}${edgePts.toFixed(1)} pts</span></div>
+      </div>
+      <div class="context-card">
+        <div class="cc-team">Veredicto</div>
+        <div class="sw-tag ${verdictClass}" style="font-size:13px; padding:6px 12px;">${verdict}</div>
+      </div>
+    </div>
+    <div class="matchup-banner" style="margin-top:14px;">${calibNote}</div>
+    <div class="note">Nota: as odds das casas já têm margem embutida (tipicamente 5-8% acima de 100% somando os dois lados) — uma diferença pequena (0-2 pts) é normalmente ruído, não vantagem real. Isto cobre só o mercado Vencedor; total de pontos e handicap ainda não têm calibração histórica validada.</div>
+  `;
 }
 
 function trendCard(label, record){
