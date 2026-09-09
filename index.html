@@ -1605,9 +1605,16 @@ async function loadCalendar(){
 function renderUpcomingTicker(){
   const el = document.getElementById('upcomingTicker');
   const today = new Date().toISOString().slice(0,10);
+  const seasonStart = new Date('2026-10-20T00:00:00');
+  const now = new Date();
+  const daysToSeason = Math.ceil((seasonStart - now) / (1000*60*60*24));
+  const countdownHtml = daysToSeason > 0
+    ? `<div class="ticker-item" style="color:var(--gold); font-weight:600;">🏀 Faltam <b style="color:var(--gold);">${daysToSeason}</b> dia${daysToSeason===1?'':'s'} para o início da época 26-27 (20 out)</div>`
+    : '';
+
   const upcoming = ALL_GAMES.filter(g => g.game_date >= today).slice(0, 8);
-  if(!upcoming.length){ el.innerHTML = ''; return; }
-  el.innerHTML = '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
+  if(!upcoming.length){ el.innerHTML = countdownHtml; return; }
+  el.innerHTML = countdownHtml + '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
     const time = g.status==='scheduled' ? fmtGameTime(g.game_time) : (g.status==='live' ? 'AO VIVO' : 'FINAL');
     return `<div class="ticker-item">${fmtGameDate(g.game_date)} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
   }).join('');
