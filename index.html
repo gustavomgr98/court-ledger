@@ -462,11 +462,24 @@
 
       <div class="panel">
         <h2>Verificador de Valor</h2>
-        <div class="sub">Mete a odd real que encontraste para o mercado <b>Vencedor</b> — o único que já temos calibração histórica a validar. Compara com a probabilidade do modelo e diz se há vantagem, já a descontar a margem típica da casa (vig).</div>
+        <div class="sub">Mete a odd real que encontraste e o instrumento diz se há vantagem — cobre Vencedor, Total de Pontos e Handicap. Vencedor tem calibração histórica real a validar; os outros dois usam a variação real de pontuação da liga para converter a nossa projeção em probabilidade.</div>
         <div class="grid2">
-          <div class="field"><label>Equipa</label><select id="valueTeamSelect"></select></div>
-          <div class="field"><label>Odd (decimal, ex: 1.90)</label><input id="valueOddInput" type="number" step="0.01" placeholder="1.90"></div>
+          <div class="field"><label>Mercado</label>
+            <select id="valueMarketType" onchange="onValueMarketChange()">
+              <option value="vencedor">Vencedor</option>
+              <option value="total">Total de Pontos</option>
+              <option value="handicap">Handicap</option>
+            </select>
+          </div>
+          <div class="field" id="valueTeamField"><label>Equipa</label><select id="valueTeamSelect"></select></div>
         </div>
+        <div class="grid2" id="valueLineField" style="display:none;">
+          <div class="field"><label id="valueLineLabel">Linha</label><input id="valueLineInput" type="number" step="0.5" placeholder="ex: 226.5"></div>
+          <div class="field" id="valueSideField" style="display:none;"><label>Lado</label>
+            <select id="valueSideSelect"><option value="over">Over</option><option value="under">Under</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Odd (decimal, ex: 1.90)</label><input id="valueOddInput" type="number" step="0.01" placeholder="1.90"></div>
         <button class="primary" onclick="checkValue()">Verificar</button>
         <div id="valueResultWrap" style="margin-top:16px;"></div>
       </div>
@@ -1034,6 +1047,8 @@ async function renderComparison(){
 }
 
 let LAST_WINPROB = null;
+let LAST_FORM = null;
+let LAST_VALUE_MATCHUP = null;
 
 async function onTeamsChanged(){
   renderCourtsForBothTeams();
@@ -1068,6 +1083,8 @@ async function renderFormAndHistory(){
     sb.rpc('get_motivation_context', {p_team: a}),
     sb.rpc('get_motivation_context', {p_team: b})
   ]);
+
+  LAST_FORM = { a: formA.data?.[0] || null, b: formB.data?.[0] || null };
 
   formGrid.innerHTML = [[a, formA.data?.[0]], [b, formB.data?.[0]]].map(([team, f])=>{
     if(!f || (f.wins+f.losses)===0) return `<div class="context-card"><div class="cc-team">${team}</div><div class="empty">Sem jogos terminados ainda.</div></div>`;
@@ -1119,19 +1136,80 @@ async function renderFormAndHistory(){
 }
 
 function populateValueTeamSelect(a, b){
+  LAST_VALUE_MATCHUP = {a, b};
   const sel = document.getElementById('valueTeamSelect');
-  sel.innerHTML = `<option value="${a}">${a}</option><option value="${b}">${b}</option>`;
+  sel.innerHTML = `<option value="${a}">${a} (casa/fora conforme calendário)</option><option value="${b}">${b}</option>`;
+  document.getElementById('valueResultWrap').innerHTML = '';
+  onValueMarketChange();
+}
+
+function onValueMarketChange(){
+  const mkt = document.getElementById('valueMarketType').value;
+  document.getElementById('valueTeamField').style.display = (mkt==='total') ? 'none' : '';
+  document.getElementById('valueLineField').style.display = (mkt==='vencedor') ? 'none' : '';
+  document.getElementById('valueSideField').style.display = (mkt==='total') ? '' : 'none';
+  document.getElementById('valueLineLabel').textContent = (mkt==='total') ? 'Linha (total combinado)' : (mkt==='handicap' ? 'Handicap da equipa (ex: -3.5)' : 'Linha');
   document.getElementById('valueResultWrap').innerHTML = '';
 }
 
+// aproximacao da funcao erro, para converter media+desvio-padrao em probabilidade (distribuicao normal)
+function erf(x){
+  const sign = x < 0 ? -1 : 1; x = Math.abs(x);
+  const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+  const t = 1/(1+p*x);
+  const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+function normalCdf(x, mean, sd){ return 0.5*(1+erf((x-mean)/(sd*Math.sqrt(2)))); }
+
 async function checkValue(){
   const wrap = document.getElementById('valueResultWrap');
-  const team = document.getElementById('valueTeamSelect').value;
+  const mkt = document.getElementById('valueMarketType').value;
   const odd = parseFloat(document.getElementById('valueOddInput').value);
   if(!odd || odd <= 1){ wrap.innerHTML = '<div class="empty">Mete uma odd decimal válida (ex: 1.90).</div>'; return; }
-  if(!LAST_WINPROB){ wrap.innerHTML = '<div class="empty">Sem probabilidade do modelo disponível para este confronto.</div>'; return; }
+  if(!LAST_WINPROB){ wrap.innerHTML = '<div class="empty">Sem dados do modelo disponíveis para este confronto.</div>'; return; }
 
-  const modelProb = (team === LAST_WINPROB.a) ? LAST_WINPROB.pA : LAST_WINPROB.pB;
+  if(mkt === 'vencedor'){
+    const team = document.getElementById('valueTeamSelect').value;
+    const modelProb = (team === LAST_WINPROB.a) ? LAST_WINPROB.pA : LAST_WINPROB.pB;
+    await renderValueResult(wrap, team, modelProb, odd, 'vencedor');
+    return;
+  }
+
+  const {data: varData} = await sb.rpc('get_scoring_variance');
+  const v = varData?.[0];
+  if(!v || !v.n_games){ wrap.innerHTML = '<div class="empty">Sem jogos suficientes ainda para estimar a variação real de pontuação.</div>'; return; }
+
+  // projecao de total/margem: reaproveita a forma ponderada ja calculada em renderFormAndHistory
+  if(!LAST_FORM || !LAST_FORM.a || !LAST_FORM.b){ wrap.innerHTML = '<div class="empty">Sem forma recente suficiente para projetar este mercado.</div>'; return; }
+  const expA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
+  const expB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+
+  if(mkt === 'total'){
+    const line = parseFloat(document.getElementById('valueLineInput').value);
+    const side = document.getElementById('valueSideSelect').value;
+    if(!line){ wrap.innerHTML = '<div class="empty">Mete a linha do total.</div>'; return; }
+    const projTotal = expA + expB;
+    const probOver = 1 - normalCdf(line, projTotal, v.sd_total);
+    const modelProb = side === 'over' ? probOver : (1 - probOver);
+    await renderValueResult(wrap, `${side==='over'?'Over':'Under'} ${line}`, modelProb, odd, 'total', `Projeção do modelo: ~${projTotal.toFixed(1)} pontos (desvio real da liga: ±${v.sd_total}, de ${v.n_games} jogos).`);
+    return;
+  }
+
+  if(mkt === 'handicap'){
+    const team = document.getElementById('valueTeamSelect').value;
+    const line = parseFloat(document.getElementById('valueLineInput').value);
+    if(isNaN(line)){ wrap.innerHTML = '<div class="empty">Mete o handicap (ex: -3.5 ou +5.5).</div>'; return; }
+    const isA = team === LAST_VALUE_MATCHUP.a;
+    const projMarginTeam = isA ? (expA - expB) : (expB - expA);
+    // cobre a linha se a margem real (a favor da equipa) for maior que -linha
+    const modelProb = 1 - normalCdf(-line, projMarginTeam, v.sd_margin);
+    await renderValueResult(wrap, `${team} ${line>0?'+':''}${line}`, modelProb, odd, 'handicap', `Margem projetada para ${team}: ${projMarginTeam>0?'+':''}${projMarginTeam.toFixed(1)} pontos (desvio real da liga: ±${v.sd_margin}, de ${v.n_games} jogos).`);
+    return;
+  }
+}
+
+async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNote){
   const impliedProb = 1 / odd;
   const edgePts = (modelProb - impliedProb) * 100;
 
@@ -1141,23 +1219,34 @@ async function checkValue(){
   else if(edgePts > -2){ verdict = 'SEM VALOR — perto do justo'; verdictClass = 'weakness'; }
   else { verdict = 'A CASA ESTÁ MAIS OTIMISTA — sem valor'; verdictClass = 'weakness'; }
 
-  const bucket = Math.max(modelProb, 1-modelProb) < 0.55 ? '50-55%'
-    : Math.max(modelProb, 1-modelProb) < 0.60 ? '55-60%'
-    : Math.max(modelProb, 1-modelProb) < 0.65 ? '60-65%'
-    : Math.max(modelProb, 1-modelProb) < 0.70 ? '65-70%' : '70%+';
-
-  let calibNote = 'Ainda sem histórico de calibração suficiente para esta faixa — trata isto como uma estimativa não validada.';
-  const {data: calib} = await sb.from('calibration_summary').select('*').eq('confidence_bucket', bucket).single();
-  if(calib && calib.n_predictions >= 10){
-    calibNote = `Histórico: quando o modelo dá confiança na faixa ${bucket}, acertou ${(calib.actual_accuracy*100).toFixed(1)}% das vezes em ${calib.n_predictions} previsões — ${calib.actual_accuracy >= (modelProb-0.05) ? 'consistente com o que o modelo diz' : 'abaixo do que o modelo promete, tem cautela extra'}.`;
-  } else if(calib){
-    calibNote = `Só ${calib.n_predictions} previsão(ões) resolvida(s) nesta faixa até agora — amostra pequena de mais para confiar no histórico.`;
+  let calibNote = '';
+  if(marketKey === 'vencedor'){
+    const bucket = Math.max(modelProb, 1-modelProb) < 0.55 ? '50-55%'
+      : Math.max(modelProb, 1-modelProb) < 0.60 ? '55-60%'
+      : Math.max(modelProb, 1-modelProb) < 0.65 ? '60-65%'
+      : Math.max(modelProb, 1-modelProb) < 0.70 ? '65-70%' : '70%+';
+    calibNote = 'Ainda sem histórico de calibração suficiente para esta faixa — trata isto como uma estimativa não validada.';
+    const {data: calib} = await sb.from('calibration_summary').select('*').eq('confidence_bucket', bucket).single();
+    if(calib && calib.n_predictions >= 10){
+      calibNote = `Histórico: quando o modelo dá confiança na faixa ${bucket}, acertou ${(calib.actual_accuracy*100).toFixed(1)}% das vezes em ${calib.n_predictions} previsões — ${calib.actual_accuracy >= (modelProb-0.05) ? 'consistente com o que o modelo diz' : 'abaixo do que o modelo promete, tem cautela extra'}.`;
+    } else if(calib){
+      calibNote = `Só ${calib.n_predictions} previsão(ões) resolvida(s) nesta faixa até agora — amostra pequena de mais para confiar no histórico.`;
+    }
+  } else {
+    const {data: proj} = await sb.from('projection_accuracy').select('*').single();
+    if(proj && proj.n >= 10){
+      const mae = marketKey === 'total' ? proj.mae_total : proj.mae_margin;
+      const bias = marketKey === 'total' ? proj.bias_total : proj.bias_margin;
+      calibNote = `Histórico do modelo neste tipo de projeção (${proj.n} jogos): erro médio de ±${mae} pontos, com viés de ${bias>0?'sobrestimar':'subestimar'} em ${Math.abs(bias)} pontos em média — usa isso para calibrar a tua confiança na linha acima.`;
+    } else {
+      calibNote = 'Ainda sem histórico suficiente para validar a qualidade destas projeções (Total/Handicap) — usa com mais cautela do que o Vencedor.';
+    }
   }
 
   wrap.innerHTML = `
     <div class="context-grid">
       <div class="context-card">
-        <div class="cc-team">${team}</div>
+        <div class="cc-team">${label}</div>
         <div class="cc-row"><span class="cc-label">Prob. implícita pela odd</span><span class="cc-val">${(impliedProb*100).toFixed(1)}%</span></div>
         <div class="cc-row"><span class="cc-label">Prob. do modelo</span><span class="cc-val">${(modelProb*100).toFixed(1)}%</span></div>
         <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Diferença (edge)</span><span class="cc-val ${edgePts>=0?'':'flag'}">${edgePts>0?'+':''}${edgePts.toFixed(1)} pts</span></div>
@@ -1167,8 +1256,9 @@ async function checkValue(){
         <div class="sw-tag ${verdictClass}" style="font-size:13px; padding:6px 12px;">${verdict}</div>
       </div>
     </div>
+    ${extraNote ? `<div class="sub" style="margin-top:12px; margin-bottom:0;">${extraNote}</div>` : ''}
     <div class="matchup-banner" style="margin-top:14px;">${calibNote}</div>
-    <div class="note">Nota: as odds das casas já têm margem embutida (tipicamente 5-8% acima de 100% somando os dois lados) — uma diferença pequena (0-2 pts) é normalmente ruído, não vantagem real. Isto cobre só o mercado Vencedor; total de pontos e handicap ainda não têm calibração histórica validada.</div>
+    <div class="note">Nota: as odds das casas já têm margem embutida (tipicamente 5-8% acima de 100% somando os dois lados) — uma diferença pequena (0-2 pts) é normalmente ruído, não vantagem real.</div>
   `;
 }
 
