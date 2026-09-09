@@ -321,6 +321,7 @@
       <button class="tab-btn" data-tab="transacoes">Transferências</button>
       <button class="tab-btn" data-tab="comparacao">Comparação de Equipas</button>
       <button class="tab-btn" data-tab="assistente">Kobe <svg class="kobe-icon" viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="6" r="5" fill="#9C6B47"/><path d="M13 10 L9 13 L5 12 L3 17 L8 20 L8 34 L24 34 L24 20 L29 17 L27 12 L23 13 L19 10 L16 13 Z" fill="#552583" stroke="#FDB927" stroke-width="1.4" stroke-linejoin="round"/><text x="16" y="29" text-anchor="middle" font-family="Oswald,sans-serif" font-weight="700" font-size="10" fill="#FDB927">24</text></svg></button>
+      <button class="tab-btn" data-tab="registo">Registo</button>
     </nav>
 
     <!-- STATS 25-26 -->
@@ -448,6 +449,12 @@
       </div>
 
       <div class="panel">
+        <h2>Tendências Situacionais</h2>
+        <div class="sub">Registo (V/D, mais recente à direita) nos últimos 20 jogos terminados, em quatro situações-chave.</div>
+        <div id="trendsWrap"></div>
+      </div>
+
+      <div class="panel">
         <h2>Resumo de Mercados a Explorar</h2>
         <div class="sub">Gerado a partir de tudo o que foi analisado acima — leitura de apoio, não uma garantia.</div>
         <div id="marketSummaryWrap"></div>
@@ -508,6 +515,41 @@
           <input id="chatInput" placeholder="Pergunta ao Kobe…" onkeydown="if(event.key==='Enter') sendChatMessage();" style="flex:1;">
           <button class="primary" onclick="sendChatMessage()">Enviar</button>
         </div>
+      </div>
+    </section>
+
+    <!-- REGISTO: calibracao do modelo + apostas -->
+    <section id="tab-registo">
+      <div class="panel">
+        <h2>Calibração do Modelo</h2>
+        <div class="sub">O sistema regista sozinho a sua previsão para cada jogo agendado, e confere assim que o jogo termina. Isto mostra se "60% de probabilidade" acerta mesmo perto de 60% das vezes — é a única forma real de confiar (ou não) no modelo.</div>
+        <div id="calibrationWrap" class="loading">A carregar…</div>
+      </div>
+
+      <div class="panel">
+        <h2>Registo de Apostas</h2>
+        <div class="sub">Livro de apostas simples — regista o que apostaste fora da app (odds reais não estão disponíveis aqui) para acompanhares o teu ROI real ao longo da época.</div>
+        <div id="bankrollSummary"></div>
+        <div id="betMsg" class="msg"></div>
+        <div class="grid4">
+          <div class="field"><label>Confronto</label><input id="betMatchup" placeholder="ex: LAL @ BOS"></div>
+          <div class="field"><label>Mercado</label>
+            <select id="betMarketType">
+              <option value="Vencedor">Vencedor</option>
+              <option value="Handicap">Handicap</option>
+              <option value="Total pontos">Total pontos</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+          <div class="field"><label>Escolha</label><input id="betPick" placeholder="ex: LAL -3.5"></div>
+          <div class="field"><label>Odd (opcional)</label><input id="betOdds" type="number" step="0.01" placeholder="ex: 1.90"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Stake (€)</label><input id="betStake" type="number" step="0.01" placeholder="ex: 10"></div>
+          <div class="field"><label>Data</label><input id="betDate" type="date"></div>
+        </div>
+        <button class="primary" onclick="submitBet()">Registar aposta</button>
+        <div id="betsListWrap" style="margin-top:20px;"></div>
       </div>
     </section>
   </div>
@@ -587,6 +629,9 @@ async function enterApp(){
     await loadTransactions();
     await loadCalendar();
     await loadStandings();
+    await loadCalibration();
+    await loadBankroll();
+    await loadBetsList();
     onTeamsChanged();
   } catch(e){
     showFatalError('Erro ao carregar dados: ' + (e && e.message ? e.message : e));
@@ -1057,7 +1102,135 @@ async function renderFormAndHistory(){
       '</tbody></table>';
   }
 
+  renderTrends(a, b);
   renderMarketSummary(a, b, formA.data?.[0], formB.data?.[0], splitA.data?.[0], splitB.data?.[0]);
+}
+
+function trendCard(label, record){
+  if(!record) return `<div class="context-card"><div class="cc-team">${label}</div><div class="empty">Sem amostra suficiente</div></div>`;
+  const w = (record.match(/V/g)||[]).length, l = (record.match(/D/g)||[]).length;
+  return `<div class="context-card">
+    <div class="cc-team">${label}</div>
+    <div class="cc-row"><span class="cc-label">Registo</span><span class="cc-val">${w}V-${l}D</span></div>
+    <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Sequência</span><span class="cc-val">${streakBadge(record)}</span></div>
+  </div>`;
+}
+
+async function renderTrends(a, b){
+  const wrap = document.getElementById('trendsWrap');
+  wrap.innerHTML = '<div class="loading">A carregar…</div>';
+  const [{data: ta}, {data: tb}] = await Promise.all([
+    sb.rpc('get_situational_trends', {p_team: a, p_n: 20}),
+    sb.rpc('get_situational_trends', {p_team: b, p_n: 20})
+  ]);
+  const tta = ta?.[0], ttb = tb?.[0];
+  function block(team, t){
+    if(!t) return '';
+    return `<div class="sw-title" style="margin-top:14px;">${team}</div>
+      <div class="context-grid">
+        ${trendCard('Depois de derrota', t.after_loss_record)}
+        ${trendCard('Depois de vitória', t.after_win_record)}
+        ${trendCard('Back-to-back', t.b2b_record)}
+        ${trendCard('2+ dias de descanso', t.rest2plus_record)}
+        ${trendCard('Vs equipas .500+', t.vs_winning_record)}
+        ${trendCard('Vs equipas <.500', t.vs_losing_record)}
+      </div>`;
+  }
+  wrap.innerHTML = block(a, tta) + block(b, ttb);
+}
+
+async function loadCalibration(){
+  const wrap = document.getElementById('calibrationWrap');
+  const {data, error} = await sb.from('calibration_summary').select('*');
+  if(error){ wrap.innerHTML = '<div class="empty">Erro a carregar.</div>'; return; }
+  if(!data || !data.length){
+    wrap.innerHTML = '<div class="empty">Ainda sem previsões resolvidas — o sistema começa a registar sozinho assim que houver jogos agendados nas próximas 48h, e confere assim que terminarem. Volta aqui quando a época estiver a decorrer.</div>';
+    return;
+  }
+  const totalN = data.reduce((s,r)=>s+r.n_predictions,0);
+  const totalCorrect = data.reduce((s,r)=>s+r.n_correct,0);
+  let html = `<div class="matchup-banner">Total: ${totalCorrect}/${totalN} previsões corretas (${totalN?(totalCorrect/totalN*100).toFixed(1):'—'}%)</div>`;
+  html += '<table style="margin-top:14px;"><thead><tr><th>Confiança prevista</th><th>Previsões</th><th>Acerto real</th></tr></thead><tbody>';
+  data.forEach(r=>{
+    const diff = r.actual_accuracy!=null ? (r.actual_accuracy*100) : null;
+    html += `<tr><td>${r.confidence_bucket}</td><td class="num">${r.n_predictions}</td><td class="num">${diff!=null ? diff.toFixed(1)+'%' : '—'}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+async function loadBankroll(){
+  const {data} = await sb.from('bankroll_summary').select('*').single();
+  const wrap = document.getElementById('bankrollSummary');
+  if(!data || data.total_bets === 0){ wrap.innerHTML = '<div class="empty">Ainda sem apostas registadas.</div>'; return; }
+  const roiClass = (data.roi_pct||0) >= 0 ? 'diff-pos' : 'diff-neg';
+  wrap.innerHTML = `<div class="context-grid">
+    <div class="context-card">
+      <div class="cc-team">Registo</div>
+      <div class="cc-row"><span class="cc-label">Total apostas</span><span class="cc-val">${data.total_bets}</span></div>
+      <div class="cc-row"><span class="cc-label">Ganhas / Perdidas</span><span class="cc-val">${data.wins}V / ${data.losses}D</span></div>
+      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Pendentes</span><span class="cc-val">${data.pending}</span></div>
+    </div>
+    <div class="context-card">
+      <div class="cc-team">Resultado</div>
+      <div class="cc-row"><span class="cc-label">Total apostado</span><span class="cc-val">€${data.total_staked ?? 0}</span></div>
+      <div class="cc-row"><span class="cc-label">Lucro/Prejuízo</span><span class="cc-val ${roiClass}">€${data.total_profit ?? 0}</span></div>
+      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">ROI</span><span class="cc-val ${roiClass}">${data.roi_pct ?? '—'}%</span></div>
+    </div>
+  </div>`;
+}
+
+async function loadBetsList(){
+  const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:false}).limit(30);
+  const wrap = document.getElementById('betsListWrap');
+  if(!data || !data.length){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '<table><thead><tr><th>Data</th><th>Confronto</th><th>Mercado</th><th>Escolha</th><th>Stake</th><th>Resultado</th><th></th></tr></thead><tbody>' +
+    data.map(b=>`<tr>
+      <td class="num">${b.placed_at}</td><td>${b.matchup}</td><td>${b.market_type}</td><td>${b.pick}</td>
+      <td class="num">€${b.stake}</td>
+      <td>
+        <select onchange="updateBetResult(${b.id}, this.value, ${b.stake}, ${b.odds||'null'})" style="width:auto; padding:4px 8px; font-size:11.5px;">
+          <option value="pending" ${b.result==='pending'?'selected':''}>Pendente</option>
+          <option value="won" ${b.result==='won'?'selected':''}>Ganhou</option>
+          <option value="lost" ${b.result==='lost'?'selected':''}>Perdeu</option>
+          <option value="void" ${b.result==='void'?'selected':''}>Anulada</option>
+        </select>
+      </td>
+      <td><button class="ghost" onclick="deleteBet(${b.id})">×</button></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+async function submitBet(){
+  const msg = document.getElementById('betMsg');
+  const matchup = document.getElementById('betMatchup').value.trim();
+  const pick = document.getElementById('betPick').value.trim();
+  const stake = parseFloat(document.getElementById('betStake').value);
+  if(!matchup || !pick || !stake){ showMsg(msg,'err','Preenche pelo menos confronto, escolha e stake.'); return; }
+  const payload = {
+    matchup, pick, stake,
+    market_type: document.getElementById('betMarketType').value,
+    odds: parseFloat(document.getElementById('betOdds').value) || null,
+    placed_at: document.getElementById('betDate').value || new Date().toISOString().slice(0,10)
+  };
+  const {error} = await sb.from('bets').insert(payload);
+  if(error){ showMsg(msg,'err','Erro: '+error.message); return; }
+  showMsg(msg,'ok','Aposta registada.');
+  ['betMatchup','betPick','betOdds','betStake','betDate'].forEach(id=>document.getElementById(id).value='');
+  await loadBankroll(); await loadBetsList();
+}
+
+async function updateBetResult(id, result, stake, odds){
+  let profit_loss = 0;
+  if(result === 'won' && odds) profit_loss = stake * (odds - 1);
+  else if(result === 'lost') profit_loss = -stake;
+  else profit_loss = 0;
+  await sb.from('bets').update({result, profit_loss}).eq('id', id);
+  await loadBankroll(); await loadBetsList();
+}
+
+async function deleteBet(id){
+  await sb.from('bets').delete().eq('id', id);
+  await loadBankroll(); await loadBetsList();
 }
 
 function renderMarketSummary(a, b, formA, formB, splitA, splitB){
