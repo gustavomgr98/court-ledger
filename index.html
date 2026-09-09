@@ -284,7 +284,7 @@
 </head>
 <body>
 
-<div id="fatalBanner" style="display:none; background:#3a1512; color:#ff8a8a; padding:14px 20px; font-family:monospace; font-size:13px; white-space:pre-wrap; border-bottom:1px solid #5a2018;"></div>
+<div id="fatalBanner" style="display:none; background:#2A1418; color:#FF5C6C; padding:14px 20px; font-family:'Roboto Mono',monospace; font-size:13px; white-space:pre-wrap; border-bottom:1px solid #5C2830;"></div>
 
 <div id="loginGate">
   <div class="login-box">
@@ -676,7 +676,7 @@ async function loadTeams(){
   const {data, error} = await sb.from('teams').select('*').order('code');
   if(error) throw new Error('teams: ' + error.message);
   TEAMS = data;
-  TEAM_COLORS = Object.fromEntries(data.map(t=>[t.code, {p: t.color_primary || '#2A3F63', s: t.color_secondary || '#3A5480'}]));
+  TEAM_COLORS = Object.fromEntries(data.map(t=>[t.code, {p: t.color_primary || '#1F3654', s: t.color_secondary || '#193453'}]));
   const realTeams = data.filter(t => !['2TM','3TM','4TM'].includes(t.code));
   const opts = realTeams.map(t=>`<option value="${t.code}">${t.code} — ${t.name}</option>`).join('');
   ['s2526TeamFilter','s2627TeamFilter','calTeamFilter'].forEach(id=>{ document.getElementById(id).innerHTML += opts; });
@@ -686,8 +686,8 @@ async function loadTeams(){
 }
 
 function teamPill(code){
-  if(!code) return '<span class="team-pill" style="background:#4A4A4A;">—</span>';
-  const c = TEAM_COLORS[code] || {p:'#2A3F63', s:'#3A5480'};
+  if(!code) return '<span class="team-pill" style="background:#3A4A5F;">—</span>';
+  const c = TEAM_COLORS[code] || {p:'#1F3654', s:'#193453'};
   return `<span class="team-pill" style="background:linear-gradient(135deg, ${c.p}, ${c.s});">${code}</span>`;
 }
 
@@ -1323,8 +1323,18 @@ async function loadCalibration(){
   }
   const totalN = data.reduce((s,r)=>s+r.n_predictions,0);
   const totalCorrect = data.reduce((s,r)=>s+r.n_correct,0);
-  let html = `<div class="matchup-banner">Total: ${totalCorrect}/${totalN} previsões corretas (${totalN?(totalCorrect/totalN*100).toFixed(1):'—'}%)</div>`;
-  html += '<table style="margin-top:14px;"><thead><tr><th>Confiança prevista</th><th>Previsões</th><th>Acerto real</th></tr></thead><tbody>';
+  const acc = totalN ? (totalCorrect/totalN*100) : null;
+  let html = `<div class="prob-board" style="margin-bottom:18px;">
+    <div class="prob-card leader">
+      <div class="team">ACERTO GERAL DO MODELO</div>
+      <div class="pct">${acc!=null ? acc.toFixed(1)+'%' : '—'}</div>
+    </div>
+    <div class="prob-card">
+      <div class="team">PREVISÕES RESOLVIDAS</div>
+      <div class="pct" style="font-size:32px;">${totalCorrect}/${totalN}</div>
+    </div>
+  </div>`;
+  html += '<table style="margin-top:4px;"><thead><tr><th>Confiança prevista</th><th>Previsões</th><th>Acerto real</th></tr></thead><tbody>';
   data.forEach(r=>{
     const diff = r.actual_accuracy!=null ? (r.actual_accuracy*100) : null;
     html += `<tr><td>${r.confidence_bucket}</td><td class="num">${r.n_predictions}</td><td class="num">${diff!=null ? diff.toFixed(1)+'%' : '—'}</td></tr>`;
@@ -1337,21 +1347,31 @@ async function loadBankroll(){
   const {data} = await sb.from('bankroll_summary').select('*').single();
   const wrap = document.getElementById('bankrollSummary');
   if(!data || data.total_bets === 0){ wrap.innerHTML = '<div class="empty">Ainda sem apostas registadas.</div>'; return; }
-  const roiClass = (data.roi_pct||0) >= 0 ? 'diff-pos' : 'diff-neg';
-  wrap.innerHTML = `<div class="context-grid">
-    <div class="context-card">
-      <div class="cc-team">Registo</div>
-      <div class="cc-row"><span class="cc-label">Total apostas</span><span class="cc-val">${data.total_bets}</span></div>
-      <div class="cc-row"><span class="cc-label">Ganhas / Perdidas</span><span class="cc-val">${data.wins}V / ${data.losses}D</span></div>
-      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Pendentes</span><span class="cc-val">${data.pending}</span></div>
+  const roiPositive = (data.roi_pct||0) >= 0;
+  const roiClass = roiPositive ? 'diff-pos' : 'diff-neg';
+  wrap.innerHTML = `
+    <div class="prob-board" style="margin-top:0; margin-bottom:18px;">
+      <div class="prob-card ${roiPositive ? 'leader' : ''}">
+        <div class="team">ROI ACUMULADO</div>
+        <div class="pct" style="${roiPositive ? '' : 'color:var(--loss);'}">${roiPositive?'+':''}${data.roi_pct ?? '—'}%</div>
+      </div>
+      <div class="prob-card">
+        <div class="team">LUCRO / PREJUÍZO</div>
+        <div class="pct" style="font-size:32px; ${roiPositive ? 'color:var(--teal);' : 'color:var(--loss);'}">€${data.total_profit ?? 0}</div>
+      </div>
     </div>
-    <div class="context-card">
-      <div class="cc-team">Resultado</div>
-      <div class="cc-row"><span class="cc-label">Total apostado</span><span class="cc-val">€${data.total_staked ?? 0}</span></div>
-      <div class="cc-row"><span class="cc-label">Lucro/Prejuízo</span><span class="cc-val ${roiClass}">€${data.total_profit ?? 0}</span></div>
-      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">ROI</span><span class="cc-val ${roiClass}">${data.roi_pct ?? '—'}%</span></div>
-    </div>
-  </div>`;
+    <div class="context-grid">
+      <div class="context-card">
+        <div class="cc-team">Registo</div>
+        <div class="cc-row"><span class="cc-label">Total apostas</span><span class="cc-val">${data.total_bets}</span></div>
+        <div class="cc-row"><span class="cc-label">Ganhas / Perdidas</span><span class="cc-val">${data.wins}V / ${data.losses}D</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Pendentes</span><span class="cc-val">${data.pending}</span></div>
+      </div>
+      <div class="context-card">
+        <div class="cc-team">Exposição</div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Total apostado</span><span class="cc-val">€${data.total_staked ?? 0}</span></div>
+      </div>
+    </div>`;
 }
 
 async function loadBetsList(){
