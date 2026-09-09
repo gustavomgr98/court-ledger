@@ -462,13 +462,14 @@
 
       <div class="panel">
         <h2>Verificador de Valor</h2>
-        <div class="sub">Mete a odd real que encontraste e o instrumento diz se há vantagem — cobre Vencedor, Total de Pontos e Handicap. Vencedor tem calibração histórica real a validar; os outros dois usam a variação real de pontuação da liga para converter a nossa projeção em probabilidade.</div>
+        <div class="sub">Mete a odd real que encontraste e o instrumento diz se há vantagem — cobre Vencedor, Total de Pontos, Handicap e Total por Equipa. Vencedor tem calibração histórica real a validar; os restantes usam a variação real de pontuação da liga para converter a nossa projeção em probabilidade.</div>
         <div class="grid2">
           <div class="field"><label>Mercado</label>
             <select id="valueMarketType" onchange="onValueMarketChange()">
               <option value="vencedor">Vencedor</option>
-              <option value="total">Total de Pontos</option>
+              <option value="total">Total de Pontos (jogo)</option>
               <option value="handicap">Handicap</option>
+              <option value="teamtotal">Total por Equipa</option>
             </select>
           </div>
           <div class="field" id="valueTeamField"><label>Equipa</label><select id="valueTeamSelect"></select></div>
@@ -1147,8 +1148,8 @@ function onValueMarketChange(){
   const mkt = document.getElementById('valueMarketType').value;
   document.getElementById('valueTeamField').style.display = (mkt==='total') ? 'none' : '';
   document.getElementById('valueLineField').style.display = (mkt==='vencedor') ? 'none' : '';
-  document.getElementById('valueSideField').style.display = (mkt==='total') ? '' : 'none';
-  document.getElementById('valueLineLabel').textContent = (mkt==='total') ? 'Linha (total combinado)' : (mkt==='handicap' ? 'Handicap da equipa (ex: -3.5)' : 'Linha');
+  document.getElementById('valueSideField').style.display = (mkt==='total' || mkt==='teamtotal') ? '' : 'none';
+  document.getElementById('valueLineLabel').textContent = (mkt==='total') ? 'Linha (total combinado)' : (mkt==='handicap' ? 'Handicap da equipa (ex: -3.5)' : (mkt==='teamtotal' ? 'Linha (pontos da equipa)' : 'Linha'));
   document.getElementById('valueResultWrap').innerHTML = '';
 }
 
@@ -1207,6 +1208,19 @@ async function checkValue(){
     await renderValueResult(wrap, `${team} ${line>0?'+':''}${line}`, modelProb, odd, 'handicap', `Margem projetada para ${team}: ${projMarginTeam>0?'+':''}${projMarginTeam.toFixed(1)} pontos (desvio real da liga: ±${v.sd_margin}, de ${v.n_games} jogos).`);
     return;
   }
+
+  if(mkt === 'teamtotal'){
+    const team = document.getElementById('valueTeamSelect').value;
+    const line = parseFloat(document.getElementById('valueLineInput').value);
+    const side = document.getElementById('valueSideSelect').value;
+    if(!line){ wrap.innerHTML = '<div class="empty">Mete a linha de pontos da equipa.</div>'; return; }
+    const isA = team === LAST_VALUE_MATCHUP.a;
+    const projTeam = isA ? expA : expB;
+    const probOver = 1 - normalCdf(line, projTeam, v.sd_team_score);
+    const modelProb = side === 'over' ? probOver : (1 - probOver);
+    await renderValueResult(wrap, `${team} ${side==='over'?'Over':'Under'} ${line}`, modelProb, odd, 'teamtotal', `Projeção do modelo para ${team}: ~${projTeam.toFixed(1)} pontos (desvio real por equipa: ±${v.sd_team_score}, de ${v.n_games} jogos).`);
+    return;
+  }
 }
 
 async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNote){
@@ -1233,13 +1247,17 @@ async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNo
       calibNote = `Só ${calib.n_predictions} previsão(ões) resolvida(s) nesta faixa até agora — amostra pequena de mais para confiar no histórico.`;
     }
   } else {
-    const {data: proj} = await sb.from('projection_accuracy').select('*').single();
-    if(proj && proj.n >= 10){
-      const mae = marketKey === 'total' ? proj.mae_total : proj.mae_margin;
-      const bias = marketKey === 'total' ? proj.bias_total : proj.bias_margin;
-      calibNote = `Histórico do modelo neste tipo de projeção (${proj.n} jogos): erro médio de ±${mae} pontos, com viés de ${bias>0?'sobrestimar':'subestimar'} em ${Math.abs(bias)} pontos em média — usa isso para calibrar a tua confiança na linha acima.`;
+    if(marketKey === 'teamtotal'){
+      calibNote = 'Ainda sem histórico de calibração específico para total por equipa individual — usa com mais cautela.';
     } else {
-      calibNote = 'Ainda sem histórico suficiente para validar a qualidade destas projeções (Total/Handicap) — usa com mais cautela do que o Vencedor.';
+      const {data: proj} = await sb.from('projection_accuracy').select('*').single();
+      if(proj && proj.n >= 10){
+        const mae = marketKey === 'total' ? proj.mae_total : proj.mae_margin;
+        const bias = marketKey === 'total' ? proj.bias_total : proj.bias_margin;
+        calibNote = `Histórico do modelo neste tipo de projeção (${proj.n} jogos): erro médio de ±${mae} pontos, com viés de ${bias>0?'sobrestimar':'subestimar'} em ${Math.abs(bias)} pontos em média — usa isso para calibrar a tua confiança na linha acima.`;
+      } else {
+        calibNote = 'Ainda sem histórico suficiente para validar a qualidade destas projeções (Total/Handicap) — usa com mais cautela do que o Vencedor.';
+      }
     }
   }
 
