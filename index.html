@@ -544,10 +544,10 @@
           (PTS + 0,7×REB + 0,7×AST − 0,7×Perdas de bola + 0,7×Roubos + 0,7×Desarmes + 50×TS%,
           constante de escala = 12) — TS% conta também os lances livres, ao contrário do eFG% simples.
           Cada estatística é ponderada pelos minutos jogados de cada jogador, para um titular de 35 min
-          pesar mais do que um suplente de 3 min. Com +1,5 pontos de rating para a equipa que joga em casa
-          quando há jogo agendado (vantagem de casa calculada diretamente da diferença média real de
-          pontuação casa/fora em todos os jogos terminados que já temos — não é um valor assumido de
-          fora, e ajusta-se sozinho à medida que a 26-27 acumula jogos), calculado apenas
+          pesar mais do que um suplente de 3 min. Com ajustes calculados diretamente dos jogos reais que
+          já temos (não valores assumidos de fora, e que se ajustam sozinhos à medida que a 26-27 acumula
+          jogos): vantagem de jogar em casa, e penalização por back-to-back (equipa com 0-1 dias de
+          descanso) — ambos medidos pela diferença média real de pontuação nessas situações. Calculado apenas
           com jogadores disponíveis e no plantel atual de cada equipa (25-26 + transferências registadas, com o peso
           da 26-27 a crescer gradualmente por jogador até 10 jogos disputados, sem cortes secos). Casa/fora
           e defesa consideram só jogos da época atual (2026-27). Contexto de viagem (distância entre
@@ -1016,23 +1016,25 @@ async function renderComparison(){
   const a = document.getElementById('cmpA').value, b = document.getElementById('cmpB').value;
   if(!a || !b) return;
 
-  renderMatchupContext(a, b);
+  await renderMatchupContext(a, b);
 
-  const [allRatings, transfersA, transfersB, nmRes, homeAdvRes] = await Promise.all([
+  const [allRatings, transfersA, transfersB, homeAdvRes, b2bRes] = await Promise.all([
     loadAllTeamRatings(),
     fetchTransferFacts(a),
     fetchTransferFacts(b),
-    sb.rpc('next_matchup', {p_team_a: a, p_team_b: b}),
-    sb.rpc('get_home_advantage')
+    sb.rpc('get_home_advantage'),
+    sb.rpc('get_b2b_penalty')
   ]);
   const ra = allRatings.find(d=>d.team_code===a) || null;
   const rb = allRatings.find(d=>d.team_code===b) || null;
   LAST_RATINGS = {a: ra, b: rb, teamA: a, teamB: b};
   LAST_TRANSFERS = {a: transfersA, b: transfersB};
   const league = computeLeagueAverages(allRatings);
-  const nextGame = nmRes?.data?.[0] || null;
+  const nextGame = LAST_MATCHUP_CONTEXT?.hasGame ? LAST_MATCHUP_CONTEXT : null;
   const homeAdvData = homeAdvRes?.data?.[0];
   const HOME_ADVANTAGE = homeAdvData?.avg_margin || 1.5; // calculado a partir dos jogos reais (ver nota abaixo)
+  const b2bData = b2bRes?.data?.[0];
+  const B2B_PENALTY = b2bData?.penalty || 1.5; // idem, calculado dos jogos reais
 
   renderBlendedTable(a, b, ra, rb);
 
@@ -1040,14 +1042,18 @@ async function renderComparison(){
   if(ra && rb){
     let diffRating = ra.rating - rb.rating;
     let homeNote = '';
+    let restNote = '';
     if(nextGame){
-      if(nextGame.home_team === a){ diffRating += HOME_ADVANTAGE; homeNote = `${a} joga em casa neste confronto (+${HOME_ADVANTAGE.toFixed(2)} no rating, calculado de ${homeAdvData?.n_games||'—'} jogos reais).`; }
-      else if(nextGame.home_team === b){ diffRating -= HOME_ADVANTAGE; homeNote = `${b} joga em casa neste confronto (+${HOME_ADVANTAGE.toFixed(2)} no rating, calculado de ${homeAdvData?.n_games||'—'} jogos reais).`; }
+      if(nextGame.homeTeam === a){ diffRating += HOME_ADVANTAGE; homeNote = `${a} joga em casa neste confronto (+${HOME_ADVANTAGE.toFixed(2)} no rating, calculado de ${homeAdvData?.n_games||'—'} jogos reais).`; }
+      else if(nextGame.homeTeam === b){ diffRating -= HOME_ADVANTAGE; homeNote = `${b} joga em casa neste confronto (+${HOME_ADVANTAGE.toFixed(2)} no rating, calculado de ${homeAdvData?.n_games||'—'} jogos reais).`; }
+      if(nextGame.infoA?.backToBack){ diffRating -= B2B_PENALTY; restNote += `${a} está em back-to-back (−${B2B_PENALTY.toFixed(2)} no rating). `; }
+      if(nextGame.infoB?.backToBack){ diffRating += B2B_PENALTY; restNote += `${b} está em back-to-back (−${B2B_PENALTY.toFixed(2)} no rating). `; }
     }
     const pA = 1/(1+Math.pow(10, -diffRating/12));
     const pB = 1-pA;
     LAST_WINPROB = {a, b, pA, pB};
     prob.innerHTML = `
+      ${restNote ? `<div class="sub" style="margin-bottom:8px;">😴 ${restNote}</div>` : ''}
       ${homeNote ? `<div class="sub" style="margin-bottom:8px;">🏠 ${homeNote}</div>` : ''}
       <div class="prob-board">
         <div class="prob-card ${pA>=pB?'leader':''}"><div class="team">${a}</div><div class="pct">${(pA*100).toFixed(1)}%</div></div>
