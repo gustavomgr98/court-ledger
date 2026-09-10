@@ -1058,7 +1058,7 @@ async function renderComparison(){
         <svg width="16" height="18" viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="6" r="5" fill="#9C6B47"/><path d="M13 10 L9 13 L5 12 L3 17 L8 20 L8 34 L24 34 L24 20 L29 17 L27 12 L23 13 L19 10 L16 13 Z" fill="#552583" stroke="#FDB927" stroke-width="1.4" stroke-linejoin="round"/><text x="16" y="29" text-anchor="middle" font-family="Oswald,sans-serif" font-weight="700" font-size="10" fill="#FDB927">24</text></svg>
         Leitura do Kobe
       </h3>
-      <div id="kobeMatchupReading" class="loading">A analisar o jogo…</div>
+      <div id="kobeMatchupReading"><button class="ghost" onclick="renderKobeReading()">✨ Gerar leitura do Kobe</button></div>
       ${swHtml}
     </div>`;
   } else {
@@ -1092,7 +1092,6 @@ async function onTeamsChanged(){
   renderCourtsForBothTeams();
   await renderComparison();
   await renderFormAndHistory();
-  renderKobeReading();
 }
 
 async function renderKobeReading(){
