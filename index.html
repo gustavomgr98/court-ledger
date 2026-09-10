@@ -1376,16 +1376,19 @@ async function loadCalibration(){
   const totalN = data.reduce((s,r)=>s+r.n_predictions,0);
   const totalCorrect = data.reduce((s,r)=>s+r.n_correct,0);
   const acc = totalN ? (totalCorrect/totalN*100) : null;
-  let html = `<div class="prob-board" style="margin-bottom:18px;">
+  const rel = reliabilityLabel(acc||0, totalN);
+  let html = `<div class="prob-board" style="margin-bottom:10px;">
     <div class="prob-card leader">
       <div class="team">ACERTO GERAL DO MODELO</div>
-      <div class="pct">${acc!=null ? acc.toFixed(1)+'%' : '—'}</div>
+      <div class="pct">${acc!=null && totalN>=10 ? acc.toFixed(1)+'%' : '—'}</div>
+      <div class="sw-tag ${rel.cls}" style="margin-top:6px; display:inline-block;">${rel.label}</div>
     </div>
     <div class="prob-card">
       <div class="team">PREVISÕES RESOLVIDAS</div>
       <div class="pct" style="font-size:32px;">${totalCorrect}/${totalN}</div>
     </div>
-  </div>`;
+  </div>
+  ${RELIABILITY_LEGEND}`;
   html += '<table style="margin-top:4px;"><thead><tr><th>Confiança prevista</th><th>Previsões</th><th>Acerto real</th></tr></thead><tbody>';
   data.forEach(r=>{
     const diff = r.actual_accuracy!=null ? (r.actual_accuracy*100) : null;
@@ -1395,24 +1398,40 @@ async function loadCalibration(){
   wrap.innerHTML = html;
 }
 
+function reliabilityLabel(pct, n, minN){
+  minN = minN || 10;
+  if(n < minN) return {label: `Amostra insuficiente (${n}/${minN})`, cls: ''};
+  if(pct <= 25) return {label: 'Não fiável', cls: 'weakness'};
+  if(pct <= 49) return {label: 'Pouco fiável', cls: 'weakness'};
+  if(pct <= 74) return {label: 'Fiabilidade satisfatória', cls: 'strength'};
+  if(pct <= 84) return {label: 'Boa fiabilidade', cls: 'strength'};
+  return {label: 'Excelente fiabilidade', cls: 'strength'};
+}
+const RELIABILITY_LEGEND = `<div class="note" style="margin-top:10px; border-top:none; padding-top:0;">Escala: ≤25% não fiável · 26-49% pouco fiável · 50-74% satisfatória · 75-84% boa · 85-100% excelente. Só aparece com 10+ resultados resolvidos — amostras pequenas não contam.</div>`;
+
 async function loadBankroll(){
   const {data} = await sb.from('bankroll_summary').select('*').single();
   const wrap = document.getElementById('bankrollSummary');
   if(!data || data.total_bets === 0){ wrap.innerHTML = '<div class="empty">Ainda sem apostas registadas.</div>'; return; }
   const roiPositive = (data.roi_pct||0) >= 0;
   const roiClass = roiPositive ? 'diff-pos' : 'diff-neg';
+  const resolved = (data.wins||0) + (data.losses||0);
+  const winPct = resolved ? (data.wins/resolved*100) : 0;
+  const rel = reliabilityLabel(winPct, resolved);
   wrap.innerHTML = `
-    <div class="prob-board" style="margin-top:0; margin-bottom:18px;">
+    <div class="prob-board" style="margin-top:0; margin-bottom:10px;">
       <div class="prob-card ${roiPositive ? 'leader' : ''}">
         <div class="team">ROI ACUMULADO</div>
         <div class="pct" style="${roiPositive ? '' : 'color:var(--loss);'}">${roiPositive?'+':''}${data.roi_pct ?? '—'}%</div>
       </div>
       <div class="prob-card">
-        <div class="team">LUCRO / PREJUÍZO</div>
-        <div class="pct" style="font-size:32px; ${roiPositive ? 'color:var(--teal);' : 'color:var(--loss);'}">€${data.total_profit ?? 0}</div>
+        <div class="team">FIABILIDADE (${resolved} apostas)</div>
+        <div class="pct" style="font-size:32px;">${resolved>=10 ? winPct.toFixed(0)+'%' : '—'}</div>
+        <div class="sw-tag ${rel.cls}" style="margin-top:6px; display:inline-block;">${rel.label}</div>
       </div>
     </div>
-    <div class="context-grid">
+    ${RELIABILITY_LEGEND}
+    <div class="context-grid" style="margin-top:14px;">
       <div class="context-card">
         <div class="cc-team">Registo</div>
         <div class="cc-row"><span class="cc-label">Total apostas</span><span class="cc-val">${data.total_bets}</span></div>
@@ -1421,7 +1440,8 @@ async function loadBankroll(){
       </div>
       <div class="context-card">
         <div class="cc-team">Exposição</div>
-        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Total apostado</span><span class="cc-val">€${data.total_staked ?? 0}</span></div>
+        <div class="cc-row"><span class="cc-label">Total apostado</span><span class="cc-val">€${data.total_staked ?? 0}</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Lucro/Prejuízo</span><span class="cc-val ${roiClass}">€${data.total_profit ?? 0}</span></div>
       </div>
     </div>`;
 }
