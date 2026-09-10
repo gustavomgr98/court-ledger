@@ -535,7 +535,7 @@
         <div id="cmpTableBlendedWrap"></div>
 
         <div id="cmpInsights"></div>
-        <button class="ghost" style="margin-top:12px;" onclick="askKobeAboutMatchup()">🏀 Pedir ao Kobe uma leitura completa</button>
+        <button class="ghost" style="margin-top:12px;" onclick="askKobeAboutMatchup()">💬 Conversar sobre este jogo com o Kobe</button>
 
         <div class="note">
           Modelo ilustrativo tipo Elo/logístico aplicado à diferença do Rating Ofensivo composto
@@ -984,45 +984,15 @@ async function renderMatchupContext(a, b){
       </div>`;
     });
     contextHtml += '</div>';
+    LAST_MATCHUP_CONTEXT = { hasGame:true, homeTeam, awayTeam, dateLabel, infoA, infoB, teamA:a, teamB:b, highAltitude: !!(gameVenue && gameVenue.is_high_altitude) };
   }
+  if(!matchup) LAST_MATCHUP_CONTEXT = { hasGame:false, teamA:a, teamB:b };
   el.innerHTML = contextHtml;
 }
 
 async function fetchTransferFacts(teamCode){
   const {data} = await sb.from('player_blended_stats').select('*').eq('team_code', teamCode).eq('is_transferred', true).order('pts', {ascending:false}).limit(2);
   return data || [];
-}
-
-function buildInsights(a, b, ra, rb, transfersA, transfersB){
-  const p = [];
-  if(ra && rb){
-    const diff = ra.rating - rb.rating;
-    const favored = diff >= 0 ? a : b;
-    const other = diff >= 0 ? b : a;
-    p.push(`Com o plantel atual, ${favored} entra como favorita sobre ${other} por ${Math.abs(diff).toFixed(1)} pontos no rating composto. Amostra: ${ra.n_from_2627} de ${ra.n_players} jogadores de ${a}, e ${rb.n_from_2627} de ${rb.n_players} de ${b}, já com jogos reais 26-27 — o resto usa a época 25-26 como base.`);
-
-    const metrics = [
-      ['ofensiva de ponto (PTS/jogo)', ra.avg_pts - rb.avg_pts, ra.avg_pts, rb.avg_pts, false],
-      ['no ressalto (REB/jogo)', ra.avg_reb - rb.avg_reb, ra.avg_reb, rb.avg_reb, false],
-      ['na criação de jogo (AST/jogo)', ra.avg_ast - rb.avg_ast, ra.avg_ast, rb.avg_ast, false],
-      ['na eficiência de lançamento (eFG%)', ra.avg_efg_pct - rb.avg_efg_pct, ra.avg_efg_pct*100, rb.avg_efg_pct*100, true],
-    ];
-    metrics.sort((x,y)=> Math.abs(y[1]) - Math.abs(x[1]));
-    const top = metrics[0];
-    const leaderTeam = top[1] >= 0 ? a : b;
-    p.push(`A maior diferença está ${top[0]}: ${leaderTeam} leva vantagem (${top[2].toFixed(1)}${top[4]?'%':''} vs ${top[3].toFixed(1)}${top[4]?'%':''}).`);
-  }
-
-  if(transfersA && transfersA.length){
-    const names = transfersA.map(t=>`${t.player_name} (ex-${t.original_team_2526}, ${t.pts.toFixed(1)} PTS/jogo)`).join(', ');
-    p.push(`${a} reforçou-se com transferências recentes com peso estatístico: ${names}.`);
-  }
-  if(transfersB && transfersB.length){
-    const names = transfersB.map(t=>`${t.player_name} (ex-${t.original_team_2526}, ${t.pts.toFixed(1)} PTS/jogo)`).join(', ');
-    p.push(`${b} reforçou-se com transferências recentes com peso estatístico: ${names}.`);
-  }
-
-  return p;
 }
 
 async function renderComparison(){
@@ -1039,6 +1009,7 @@ async function renderComparison(){
   const ra = allRatings.find(d=>d.team_code===a) || null;
   const rb = allRatings.find(d=>d.team_code===b) || null;
   LAST_RATINGS = {a: ra, b: rb, teamA: a, teamB: b};
+  LAST_TRANSFERS = {a: transfersA, b: transfersB};
   const league = computeLeagueAverages(allRatings);
 
   renderBlendedTable(a, b, ra, rb);
@@ -1061,8 +1032,6 @@ async function renderComparison(){
     prob.innerHTML = '';
   }
 
-  const insights = buildInsights(a, b, ra, rb, transfersA, transfersB);
-  const insightsEl = document.getElementById('cmpInsights');
   const swA = strengthsWeaknesses(ra, league);
   const swB = strengthsWeaknesses(rb, league);
   const swHtml = `
@@ -1080,14 +1049,25 @@ async function renderComparison(){
         ${(!swB.strengths.length && !swB.weaknesses.length) ? '<span class="ts">Sem desvios relevantes face à média</span>' : ''}
       </div>
     </div>`;
-  if(insights.length || league){
-    insightsEl.innerHTML = `<div class="insight-box"><h3>Leitura descritiva</h3>${insights.map(s=>`<p>${s}</p>`).join('')}${league?swHtml:''}</div>`;
+  const insightsEl = document.getElementById('cmpInsights');
+  if(league){
+    insightsEl.innerHTML = `<div class="insight-box">
+      <h3 style="display:flex; align-items:center; gap:8px;">
+        <svg width="16" height="18" viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="6" r="5" fill="#9C6B47"/><path d="M13 10 L9 13 L5 12 L3 17 L8 20 L8 34 L24 34 L24 20 L29 17 L27 12 L23 13 L19 10 L16 13 Z" fill="#552583" stroke="#FDB927" stroke-width="1.4" stroke-linejoin="round"/><text x="16" y="29" text-anchor="middle" font-family="Oswald,sans-serif" font-weight="700" font-size="10" fill="#FDB927">24</text></svg>
+        Leitura do Kobe
+      </h3>
+      <div id="kobeMatchupReading" class="loading">A analisar o jogo…</div>
+      ${swHtml}
+    </div>`;
   } else {
     insightsEl.innerHTML = '';
   }
 }
 
 let LAST_WINPROB = null;
+let LAST_MATCHUP_CONTEXT = null;
+let LAST_TRENDS = null;
+let LAST_TRANSFERS = null;
 let LAST_FORM = null;
 let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
@@ -1097,7 +1077,59 @@ let BET_GAMES = [];
 async function onTeamsChanged(){
   renderCourtsForBothTeams();
   await renderComparison();
-  renderFormAndHistory();
+  await renderFormAndHistory();
+  renderKobeReading();
+}
+
+async function renderKobeReading(){
+  const el = document.getElementById('kobeMatchupReading');
+  if(!el || !LAST_RATINGS || !LAST_RATINGS.a || !LAST_RATINGS.b) return;
+  const {teamA: a, teamB: b, a: ra, b: rb} = LAST_RATINGS;
+  const fa = LAST_FORM?.a, fb = LAST_FORM?.b;
+  const mc = LAST_MATCHUP_CONTEXT;
+  const ta = LAST_TRENDS?.a, tb = LAST_TRENDS?.b;
+
+  let prompt = `Escreve uma leitura em prosa simples (linguagem do dia a dia, sem jargão técnico) sobre o confronto ${a} vs ${b}, cobrindo TODOS estes dados de forma natural, como se estivesses a explicar a um amigo antes do jogo:\n\n`;
+  prompt += `RATING: ${a}=${ra.rating} (${ra.n_from_2627}/${ra.n_players} jogadores já com jogos reais 26-27), ${b}=${rb.rating} (${rb.n_from_2627}/${rb.n_players}).\n`;
+  prompt += `MÉDIAS: ${a} — ${ra.avg_pts} PTS, ${ra.avg_reb} REB, ${ra.avg_ast} AST, ${(ra.avg_efg_pct*100).toFixed(1)}% eFG. ${b} — ${rb.avg_pts} PTS, ${rb.avg_reb} REB, ${rb.avg_ast} AST, ${(rb.avg_efg_pct*100).toFixed(1)}% eFG.\n`;
+  if(LAST_WINPROB) prompt += `PROBABILIDADE DO MODELO: ${a} ${(LAST_WINPROB.pA*100).toFixed(1)}% vs ${b} ${(LAST_WINPROB.pB*100).toFixed(1)}%.\n`;
+  if(fa) prompt += `FORMA RECENTE ${a}: ${fa.wins}V-${fa.losses}D, sequência ${fa.results}.\n`;
+  if(fb) prompt += `FORMA RECENTE ${b}: ${fb.wins}V-${fb.losses}D, sequência ${fb.results}.\n`;
+  if(ta) prompt += `TENDÊNCIAS ${a}: depois de derrota ${ta.after_loss_record||'sem dados'}, back-to-back ${ta.b2b_record||'sem dados'}.\n`;
+  if(tb) prompt += `TENDÊNCIAS ${b}: depois de derrota ${tb.after_loss_record||'sem dados'}, back-to-back ${tb.b2b_record||'sem dados'}.\n`;
+  if(LAST_TRANSFERS?.a?.length) prompt += `TRANSFERÊNCIAS RECENTES PARA ${a}: ${LAST_TRANSFERS.a.map(t=>`${t.player_name} (ex-${t.original_team_2526}, ${t.pts.toFixed(1)} PTS/jogo)`).join(', ')}.\n`;
+  if(LAST_TRANSFERS?.b?.length) prompt += `TRANSFERÊNCIAS RECENTES PARA ${b}: ${LAST_TRANSFERS.b.map(t=>`${t.player_name} (ex-${t.original_team_2526}, ${t.pts.toFixed(1)} PTS/jogo)`).join(', ')}.\n`;
+  if(mc?.hasGame){
+    prompt += `JOGO AGENDADO: ${mc.dateLabel}, ${mc.awayTeam} @ ${mc.homeTeam}.\n`;
+    if(mc.infoA) prompt += `Contexto ${a}: ${mc.infoA.restDays!=null ? mc.infoA.restDays+' dias de descanso'+(mc.infoA.backToBack?' (back-to-back)':'') : 'sem dados de descanso'}, ${mc.infoA.travelKm}km de viagem.\n`;
+    if(mc.infoB) prompt += `Contexto ${b}: ${mc.infoB.restDays!=null ? mc.infoB.restDays+' dias de descanso'+(mc.infoB.backToBack?' (back-to-back)':'') : 'sem dados de descanso'}, ${mc.infoB.travelKm}km de viagem.\n`;
+    if(mc.highAltitude) prompt += `Jogo em altitude elevada — desvantagem extra para a equipa visitante.\n`;
+  } else {
+    prompt += `Sem jogo agendado entre as duas equipas nesta época ainda — não fales de viagem/descanso específico.\n`;
+  }
+  prompt += `\nEscreve 2-3 parágrafos curtos e diretos. Não repitas os números todos em lista — conta a história: quem está favorito e porquê, o que mais salta à vista, e um alerta se a amostra ainda for pequena (época ainda não começou a sério). Não te apresentes, vai direto ao assunto.`;
+
+  el.className = 'loading';
+  el.textContent = 'A analisar o jogo…';
+
+  try{
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/ai-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY)
+      },
+      body: JSON.stringify({ message: prompt, history: [] })
+    });
+    const data = await resp.json();
+    el.className = '';
+    el.style.cssText = 'font-size:13.5px; line-height:1.6; white-space:pre-wrap; margin-bottom:14px;';
+    el.textContent = data.error ? ('Não consegui gerar a leitura agora: ' + data.error) : (data.text || '(sem resposta)');
+  } catch(e){
+    el.className = '';
+    el.textContent = 'Erro de rede ao pedir a leitura ao Kobe.';
+  }
 }
 
 function streakBadge(results){
@@ -1363,6 +1395,7 @@ async function renderTrends(a, b){
       </div>`;
   }
   wrap.innerHTML = block(a, tta) + block(b, ttb);
+  LAST_TRENDS = { a: tta, b: ttb };
 }
 
 async function loadCalibration(){
