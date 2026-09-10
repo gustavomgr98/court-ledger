@@ -545,7 +545,9 @@
           constante de escala = 12) — TS% conta também os lances livres, ao contrário do eFG% simples.
           Cada estatística é ponderada pelos minutos jogados de cada jogador, para um titular de 35 min
           pesar mais do que um suplente de 3 min. Com +1,5 pontos de rating para a equipa que joga em casa
-          quando há jogo agendado (vantagem de casa historicamente estabelecida na NBA), calculado apenas
+          quando há jogo agendado (vantagem de casa calculada diretamente da diferença média real de
+          pontuação casa/fora em todos os jogos terminados que já temos — não é um valor assumido de
+          fora, e ajusta-se sozinho à medida que a 26-27 acumula jogos), calculado apenas
           com jogadores disponíveis e no plantel atual de cada equipa (25-26 + transferências registadas, com o peso
           da 26-27 a crescer gradualmente por jogador até 10 jogos disputados, sem cortes secos). Casa/fora
           e defesa consideram só jogos da época atual (2026-27). Contexto de viagem (distância entre
@@ -1016,11 +1018,12 @@ async function renderComparison(){
 
   renderMatchupContext(a, b);
 
-  const [allRatings, transfersA, transfersB, nmRes] = await Promise.all([
+  const [allRatings, transfersA, transfersB, nmRes, homeAdvRes] = await Promise.all([
     loadAllTeamRatings(),
     fetchTransferFacts(a),
     fetchTransferFacts(b),
-    sb.rpc('next_matchup', {p_team_a: a, p_team_b: b})
+    sb.rpc('next_matchup', {p_team_a: a, p_team_b: b}),
+    sb.rpc('get_home_advantage')
   ]);
   const ra = allRatings.find(d=>d.team_code===a) || null;
   const rb = allRatings.find(d=>d.team_code===b) || null;
@@ -1028,7 +1031,8 @@ async function renderComparison(){
   LAST_TRANSFERS = {a: transfersA, b: transfersB};
   const league = computeLeagueAverages(allRatings);
   const nextGame = nmRes?.data?.[0] || null;
-  const HOME_ADVANTAGE = 1.5; // pontos de rating, equivalente a ~2-3 pts de margem real em casa
+  const homeAdvData = homeAdvRes?.data?.[0];
+  const HOME_ADVANTAGE = homeAdvData?.avg_margin || 1.5; // calculado a partir dos jogos reais (ver nota abaixo)
 
   renderBlendedTable(a, b, ra, rb);
 
@@ -1037,8 +1041,8 @@ async function renderComparison(){
     let diffRating = ra.rating - rb.rating;
     let homeNote = '';
     if(nextGame){
-      if(nextGame.home_team === a){ diffRating += HOME_ADVANTAGE; homeNote = `${a} joga em casa neste confronto (+${HOME_ADVANTAGE} no rating).`; }
-      else if(nextGame.home_team === b){ diffRating -= HOME_ADVANTAGE; homeNote = `${b} joga em casa neste confronto (+${HOME_ADVANTAGE} no rating).`; }
+      if(nextGame.home_team === a){ diffRating += HOME_ADVANTAGE; homeNote = `${a} joga em casa neste confronto (+${HOME_ADVANTAGE.toFixed(2)} no rating, calculado de ${homeAdvData?.n_games||'—'} jogos reais).`; }
+      else if(nextGame.home_team === b){ diffRating -= HOME_ADVANTAGE; homeNote = `${b} joga em casa neste confronto (+${HOME_ADVANTAGE.toFixed(2)} no rating, calculado de ${homeAdvData?.n_games||'—'} jogos reais).`; }
     }
     const pA = 1/(1+Math.pow(10, -diffRating/12));
     const pB = 1-pA;
