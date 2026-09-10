@@ -1559,7 +1559,7 @@ async function populateBetGameSelect(){
     .order('game_date').limit(60);
   BET_GAMES = data || [];
   sel.innerHTML = '<option value="">— escolhe um jogo —</option>' +
-    BET_GAMES.map(g=>`<option value="${g.id}">${fmtGameDate(g.game_date)} · ${g.away_team} @ ${g.home_team}</option>`).join('');
+    BET_GAMES.map(g=>`<option value="${g.id}">${fmtGameDateTime(g).dateLabel} · ${g.away_team} @ ${g.home_team}</option>`).join('');
   onBetGameChange();
 }
 
@@ -1871,8 +1871,9 @@ function renderUpcomingTicker(){
   const upcoming = ALL_GAMES.filter(g => g.game_date >= today).slice(0, 8);
   if(!upcoming.length){ el.innerHTML = countdownHtml; return; }
   el.innerHTML = countdownHtml + '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
-    const time = g.status==='scheduled' ? fmtGameTime(g.game_time) : (g.status==='live' ? 'AO VIVO' : 'FINAL');
-    return `<div class="ticker-item" style="cursor:pointer;" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">${fmtGameDate(g.game_date)} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
+    const dt = fmtGameDateTime(g);
+    const time = g.status==='scheduled' ? dt.timeLabel : (g.status==='live' ? 'AO VIVO' : 'FINAL');
+    return `<div class="ticker-item" style="cursor:pointer;" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">${dt.dateLabel} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
   }).join('');
 }
 
@@ -1886,6 +1887,22 @@ function fmtGameTime(gameTimeIso){
   const d = new Date(gameTimeIso);
   if(isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'});
+}
+
+// Deriva SEMPRE a data e a hora exibidas a partir da mesma fonte (o instante UTC completo),
+// para nunca ficarem dessincronizadas: a data local pode ser um dia diferente da data UTC
+// guardada (ex: jogo às 23h UTC é meia-noite, ja no dia seguinte, em Portugal).
+function fmtGameDateTime(g){
+  if(g.game_time){
+    const d = new Date(g.game_time);
+    if(!isNaN(d.getTime())){
+      return {
+        dateLabel: d.toLocaleDateString('pt-PT', {weekday:'short', day:'2-digit', month:'short'}),
+        timeLabel: d.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'})
+      };
+    }
+  }
+  return { dateLabel: fmtGameDate(g.game_date), timeLabel: '—' };
 }
 
 function renderCalendar(){
@@ -1905,8 +1922,9 @@ function renderCalendar(){
   games.forEach(g=>{
     const score = (g.status==='final') ? `${g.away_score} - ${g.home_score}` : '—';
     const statusLabel = g.status==='final' ? 'Final' : g.status==='live' ? 'Ao vivo' : 'Agendado';
-    const timeLabel = g.status==='scheduled' ? fmtGameTime(g.game_time) : '—';
-    html += `<tr class="game-row" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')"><td class="num">${fmtGameDate(g.game_date)}</td><td class="num">${timeLabel}</td><td>${teamPill(g.away_team)}</td><td class="ts">@</td><td>${teamPill(g.home_team)}</td><td class="num">${score}</td><td>${statusLabel}</td></tr>`;
+    const dt = fmtGameDateTime(g);
+    const timeLabel = g.status==='scheduled' ? dt.timeLabel : '—';
+    html += `<tr class="game-row" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')"><td class="num">${dt.dateLabel}</td><td class="num">${timeLabel}</td><td>${teamPill(g.away_team)}</td><td class="ts">@</td><td>${teamPill(g.home_team)}</td><td class="num">${score}</td><td>${statusLabel}</td></tr>`;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
