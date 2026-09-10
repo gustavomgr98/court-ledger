@@ -1925,23 +1925,41 @@ function addKobeActionBubble(text, action){
   confirmBtn.onclick = async () => {
     confirmBtn.disabled = true; cancelBtn.disabled = true;
     confirmBtn.textContent = 'A aplicar…';
-    const {error} = await sb.from('players').update({is_available: action.isAvailable}).eq('id', action.playerId);
-    if(error){
-      confirmBtn.textContent = 'Erro';
-      addChatBubble('bot', 'Não consegui aplicar: ' + error.message);
-      return;
-    }
-    actionsRow.innerHTML = '';
-    const doneMsg = document.createElement('div');
-    doneMsg.style.cssText = 'font-size:12px; color:var(--teal);';
-    doneMsg.textContent = `✓ ${action.playerName} marcado como ${action.isAvailable?'disponível':'indisponível'}.`;
-    div.appendChild(doneMsg);
-    // atualiza qualquer vista de comparacao aberta, se as equipas envolvidas estiverem selecionadas
-    const p2 = ALL_PLAYERS.find(x=>x.id===action.playerId);
-    if(p2) p2.is_available = action.isAvailable;
-    if(document.getElementById('cmpA').value && document.getElementById('cmpB').value){
-      renderCourtsForBothTeams();
-      onTeamsChanged();
+
+    if(action.type === 'set_availability'){
+      const {error} = await sb.from('players').update({is_available: action.isAvailable}).eq('id', action.playerId);
+      if(error){
+        confirmBtn.textContent = 'Erro';
+        addChatBubble('bot', 'Não consegui aplicar: ' + error.message);
+        return;
+      }
+      actionsRow.innerHTML = '';
+      const doneMsg = document.createElement('div');
+      doneMsg.style.cssText = 'font-size:12px; color:var(--teal);';
+      doneMsg.textContent = `✓ ${action.playerName} marcado como ${action.isAvailable?'disponível':'indisponível'}.`;
+      div.appendChild(doneMsg);
+      const p2 = ALL_PLAYERS.find(x=>x.id===action.playerId);
+      if(p2) p2.is_available = action.isAvailable;
+      if(document.getElementById('cmpA').value && document.getElementById('cmpB').value){
+        renderCourtsForBothTeams();
+        onTeamsChanged();
+      }
+    } else if(action.type === 'set_coach'){
+      const {error} = await sb.from('coaches').upsert({
+        team_code: action.teamCode, coach_name: action.newCoachName,
+        previous_coach: action.previousCoach, since_date: new Date().toISOString().slice(0,10),
+        updated_at: new Date().toISOString()
+      });
+      if(error){
+        confirmBtn.textContent = 'Erro';
+        addChatBubble('bot', 'Não consegui aplicar: ' + error.message);
+        return;
+      }
+      actionsRow.innerHTML = '';
+      const doneMsg = document.createElement('div');
+      doneMsg.style.cssText = 'font-size:12px; color:var(--teal);';
+      doneMsg.textContent = `✓ ${action.teamName}: treinador atualizado para ${action.newCoachName}.`;
+      div.appendChild(doneMsg);
     }
   };
   cancelBtn.onclick = () => { actionsRow.remove(); addChatBubble('bot', 'Ok, não fiz nenhuma alteração.'); };
