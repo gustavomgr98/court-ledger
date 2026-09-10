@@ -540,11 +540,13 @@
         <button class="ghost" style="margin-top:12px;" onclick="askKobeAboutMatchup()">💬 Conversar sobre este jogo com o Kobe</button>
 
         <div class="note">
-          Modelo ilustrativo tipo Elo/logístico aplicado à diferença do Rating Ofensivo composto
-          (PTS + 0,7×REB + 0,7×AST − 0,7×Perdas de bola + 50×eFG%, constante de escala = 12),
-          com +1,5 pontos de rating para a equipa que joga em casa quando há jogo agendado
-          (vantagem de casa historicamente estabelecida na NBA), calculado apenas com jogadores
-          disponíveis e no plantel atual de cada equipa (25-26 + transferências registadas, com o peso
+          Modelo ilustrativo tipo Elo/logístico aplicado à diferença do Rating composto
+          (PTS + 0,7×REB + 0,7×AST − 0,7×Perdas de bola + 0,7×Roubos + 0,7×Desarmes + 50×TS%,
+          constante de escala = 12) — TS% conta também os lances livres, ao contrário do eFG% simples.
+          Cada estatística é ponderada pelos minutos jogados de cada jogador, para um titular de 35 min
+          pesar mais do que um suplente de 3 min. Com +1,5 pontos de rating para a equipa que joga em casa
+          quando há jogo agendado (vantagem de casa historicamente estabelecida na NBA), calculado apenas
+          com jogadores disponíveis e no plantel atual de cada equipa (25-26 + transferências registadas, com o peso
           da 26-27 a crescer gradualmente por jogador até 10 jogos disputados, sem cortes secos). Casa/fora
           e defesa consideram só jogos da época atual (2026-27). Contexto de viagem (distância entre
           arenas, fórmula haversine) e descanso vêm do calendário real quando há um jogo agendado entre
@@ -876,7 +878,8 @@ function computeLeagueAverages(allRatings){
   const sum = (k)=> allRatings.reduce((s,r)=> s + (Number(r[k])||0), 0);
   return {
     avg_pts: sum('avg_pts')/n, avg_reb: sum('avg_reb')/n, avg_ast: sum('avg_ast')/n, avg_tov: sum('avg_tov')/n,
-    avg_fg_pct: sum('avg_fg_pct')/n, avg_3p_pct: sum('avg_3p_pct')/n, avg_efg_pct: sum('avg_efg_pct')/n
+    avg_stl: sum('avg_stl')/n, avg_blk: sum('avg_blk')/n,
+    avg_fg_pct: sum('avg_fg_pct')/n, avg_3p_pct: sum('avg_3p_pct')/n, avg_ts_pct: sum('avg_ts_pct')/n
   };
 }
 
@@ -897,9 +900,11 @@ function renderBlendedTable(a, b, ra, rb){
     ['REB/Jog', ra.avg_reb, rb.avg_reb, 1, false],
     ['AST/Jog', ra.avg_ast, rb.avg_ast, 1, false],
     ['Perdas de bola/Jog', ra.avg_tov, rb.avg_tov, 1, true],
+    ['Roubos de bola/Jog', ra.avg_stl, rb.avg_stl, 1, false],
+    ['Desarmes/Jog', ra.avg_blk, rb.avg_blk, 1, false],
     ['FG%', ra.avg_fg_pct, rb.avg_fg_pct, 100, false],
     ['3P%', ra.avg_3p_pct, rb.avg_3p_pct, 100, false],
-    ['eFG%', ra.avg_efg_pct, rb.avg_efg_pct, 100, false],
+    ['TS%', ra.avg_ts_pct, rb.avg_ts_pct, 100, false],
     ['Rating composto', ra.rating, rb.rating, 1, false],
   ];
   let html = `<table class="cmp-table"><thead><tr><th>Métrica</th><th>${a}</th><th>${b}</th><th>Dif.</th></tr></thead><tbody>`;
@@ -921,9 +926,11 @@ function strengthsWeaknesses(teamStats, league){
     ['ataque (PTS)', teamStats.avg_pts, league.avg_pts, false],
     ['ressalto (REB)', teamStats.avg_reb, league.avg_reb, false],
     ['passe (AST)', teamStats.avg_ast, league.avg_ast, false],
-    ['eficiência (eFG%)', teamStats.avg_efg_pct, league.avg_efg_pct, false],
+    ['eficiência total (TS%)', teamStats.avg_ts_pct, league.avg_ts_pct, false],
     ['triplo (3P%)', teamStats.avg_3p_pct, league.avg_3p_pct, false],
     ['cuidado com a bola (menos perdas)', teamStats.avg_tov, league.avg_tov, true],
+    ['roubos de bola', teamStats.avg_stl, league.avg_stl, false],
+    ['desarmes', teamStats.avg_blk, league.avg_blk, false],
   ];
   const strengths = [], weaknesses = [];
   checks.forEach(([label,val,avg,invert])=>{
@@ -1119,7 +1126,7 @@ async function renderKobeReading(){
 
   let prompt = `Escreve uma leitura em prosa simples (linguagem do dia a dia, sem jargão técnico) sobre o confronto ${a} vs ${b}, cobrindo TODOS estes dados de forma natural, como se estivesses a explicar a um amigo antes do jogo:\n\n`;
   prompt += `RATING: ${a}=${ra.rating} (${ra.n_from_2627}/${ra.n_players} jogadores já com jogos reais 26-27), ${b}=${rb.rating} (${rb.n_from_2627}/${rb.n_players}).\n`;
-  prompt += `MÉDIAS: ${a} — ${ra.avg_pts} PTS, ${ra.avg_reb} REB, ${ra.avg_ast} AST, ${(ra.avg_efg_pct*100).toFixed(1)}% eFG. ${b} — ${rb.avg_pts} PTS, ${rb.avg_reb} REB, ${rb.avg_ast} AST, ${(rb.avg_efg_pct*100).toFixed(1)}% eFG.\n`;
+  prompt += `MÉDIAS: ${a} — ${ra.avg_pts} PTS, ${ra.avg_reb} REB, ${ra.avg_ast} AST, ${(ra.avg_ts_pct*100).toFixed(1)}% TS. ${b} — ${rb.avg_pts} PTS, ${rb.avg_reb} REB, ${rb.avg_ast} AST, ${(rb.avg_ts_pct*100).toFixed(1)}% TS.\n`;
   if(LAST_WINPROB) prompt += `PROBABILIDADE DO MODELO: ${a} ${(LAST_WINPROB.pA*100).toFixed(1)}% vs ${b} ${(LAST_WINPROB.pB*100).toFixed(1)}%.\n`;
   if(fa) prompt += `FORMA RECENTE ${a}: ${fa.wins}V-${fa.losses}D, sequência ${fa.results}.\n`;
   if(fb) prompt += `FORMA RECENTE ${b}: ${fb.wins}V-${fb.losses}D, sequência ${fb.results}.\n`;
@@ -2054,7 +2061,7 @@ async function askKobeAboutMatchup(){
 
   let prompt = `Faz-me uma leitura completa e fluida (não uma lista) do confronto ${a} vs ${b}, escrita como um analista experiente falaria, usando estes números já calculados pela app:\n\n`;
   prompt += `Rating composto: ${a}=${ra.rating} (${ra.n_from_2627}/${ra.n_players} jogadores já com jogos 26-27), ${b}=${rb.rating} (${rb.n_from_2627}/${rb.n_players}).\n`;
-  prompt += `Médias: ${a} — ${ra.avg_pts} PTS, ${ra.avg_reb} REB, ${ra.avg_ast} AST, ${(ra.avg_efg_pct*100).toFixed(1)}% eFG. ${b} — ${rb.avg_pts} PTS, ${rb.avg_reb} REB, ${rb.avg_ast} AST, ${(rb.avg_efg_pct*100).toFixed(1)}% eFG.\n`;
+  prompt += `Médias: ${a} — ${ra.avg_pts} PTS, ${ra.avg_reb} REB, ${ra.avg_ast} AST, ${(ra.avg_ts_pct*100).toFixed(1)}% TS. ${b} — ${rb.avg_pts} PTS, ${rb.avg_reb} REB, ${rb.avg_ast} AST, ${(rb.avg_ts_pct*100).toFixed(1)}% TS.\n`;
   if(LAST_WINPROB) prompt += `Probabilidade de vitória do modelo: ${a} ${(LAST_WINPROB.pA*100).toFixed(1)}% vs ${b} ${(LAST_WINPROB.pB*100).toFixed(1)}%.\n`;
   if(fa) prompt += `Forma recente ${a}: ${fa.wins}V-${fa.losses}D, sequência ${fa.results}, diferencial ponderado ${fa.weighted_margin}.\n`;
   if(fb) prompt += `Forma recente ${b}: ${fb.wins}V-${fb.losses}D, sequência ${fb.results}, diferencial ponderado ${fb.weighted_margin}.\n`;
