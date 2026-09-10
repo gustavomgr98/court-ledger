@@ -1851,7 +1851,7 @@ async function renderCourtsForBothTeams(){
 let ALL_GAMES = [];
 
 async function loadCalendar(){
-  const {data, error} = await sb.from('games').select('*').eq('season', '2026-27').order('game_date');
+  const {data, error} = await sb.from('games').select('*').eq('season', '2026-27').order('game_date').order('game_time', {nullsFirst: false});
   if(error) throw new Error('games: ' + error.message);
   ALL_GAMES = data || [];
   renderCalendar();
