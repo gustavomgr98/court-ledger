@@ -108,6 +108,8 @@
   th:hover{color:var(--paint);}
   td{padding:9px 10px; border-bottom:1px solid var(--line-soft); white-space:nowrap;}
   tr:hover td{background:rgba(255,122,61,0.045);}
+  .game-row{cursor:pointer;}
+  .game-row:hover td{background:rgba(255,122,61,0.09);}
   .num{font-family:'Roboto Mono',monospace; text-align:right; font-variant-numeric:tabular-nums;}
   .name-cell{font-weight:600;}
   .team-pill{
@@ -1074,6 +1076,18 @@ let LAST_VALUE_MATCHUP = null;
 let LAST_VALUE_CHECK = null;
 let BET_GAMES = [];
 
+function openComparisonFromGame(awayTeam, homeTeam){
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="comparacao"]').classList.add('active');
+  document.getElementById('tab-comparacao').classList.add('active');
+
+  document.getElementById('cmpA').value = awayTeam;
+  document.getElementById('cmpB').value = homeTeam;
+  onTeamsChanged();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
 async function onTeamsChanged(){
   renderCourtsForBothTeams();
   await renderComparison();
@@ -1816,7 +1830,7 @@ function renderUpcomingTicker(){
   if(!upcoming.length){ el.innerHTML = countdownHtml; return; }
   el.innerHTML = countdownHtml + '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
     const time = g.status==='scheduled' ? fmtGameTime(g.game_time) : (g.status==='live' ? 'AO VIVO' : 'FINAL');
-    return `<div class="ticker-item">${fmtGameDate(g.game_date)} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
+    return `<div class="ticker-item" style="cursor:pointer;" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">${fmtGameDate(g.game_date)} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
   }).join('');
 }
 
@@ -1850,7 +1864,7 @@ function renderCalendar(){
     const score = (g.status==='final') ? `${g.away_score} - ${g.home_score}` : '—';
     const statusLabel = g.status==='final' ? 'Final' : g.status==='live' ? 'Ao vivo' : 'Agendado';
     const timeLabel = g.status==='scheduled' ? fmtGameTime(g.game_time) : '—';
-    html += `<tr><td class="num">${fmtGameDate(g.game_date)}</td><td class="num">${timeLabel}</td><td>${teamPill(g.away_team)}</td><td class="ts">@</td><td>${teamPill(g.home_team)}</td><td class="num">${score}</td><td>${statusLabel}</td></tr>`;
+    html += `<tr class="game-row" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')"><td class="num">${fmtGameDate(g.game_date)}</td><td class="num">${timeLabel}</td><td>${teamPill(g.away_team)}</td><td class="ts">@</td><td>${teamPill(g.home_team)}</td><td class="num">${score}</td><td>${statusLabel}</td></tr>`;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
