@@ -1091,6 +1091,7 @@ let LAST_WINPROB = null;
 let LAST_FORM = null;
 let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
+let LAST_VALUE_CHECK = null;
 let BET_GAMES = [];
 
 async function onTeamsChanged(){
@@ -1212,9 +1213,13 @@ async function checkValue(){
   if(!odd || odd <= 1){ wrap.innerHTML = '<div class="empty">Mete uma odd decimal válida (ex: 1.90).</div>'; return; }
   if(!LAST_WINPROB){ wrap.innerHTML = '<div class="empty">Sem dados do modelo disponíveis para este confronto.</div>'; return; }
 
+  const {data: nm} = await sb.rpc('next_matchup', {p_team_a: LAST_VALUE_MATCHUP.a, p_team_b: LAST_VALUE_MATCHUP.b});
+  const linkedGameId = nm?.[0]?.game_id || null;
+
   if(mkt === 'vencedor'){
     const team = document.getElementById('valueTeamSelect').value;
     const modelProb = (team === LAST_WINPROB.a) ? LAST_WINPROB.pA : LAST_WINPROB.pB;
+    LAST_VALUE_CHECK = {marketType:'Vencedor', team, line:null, side:null, odd, gameId:linkedGameId};
     await renderValueResult(wrap, team, modelProb, odd, 'vencedor');
     return;
   }
@@ -1235,6 +1240,7 @@ async function checkValue(){
     const projTotal = expA + expB;
     const probOver = 1 - normalCdf(line, projTotal, v.sd_total);
     const modelProb = side === 'over' ? probOver : (1 - probOver);
+    LAST_VALUE_CHECK = {marketType:'Total pontos', team:null, line, side, odd, gameId:linkedGameId};
     await renderValueResult(wrap, `${side==='over'?'Over':'Under'} ${line}`, modelProb, odd, 'total', `Projeção do modelo: ~${projTotal.toFixed(1)} pontos (desvio real da liga: ±${v.sd_total}, de ${v.n_games} jogos).`);
     return;
   }
@@ -1247,6 +1253,7 @@ async function checkValue(){
     const projMarginTeam = isA ? (expA - expB) : (expB - expA);
     // cobre a linha se a margem real (a favor da equipa) for maior que -linha
     const modelProb = 1 - normalCdf(-line, projMarginTeam, v.sd_margin);
+    LAST_VALUE_CHECK = {marketType:'Handicap', team, line, side:null, odd, gameId:linkedGameId};
     await renderValueResult(wrap, `${team} ${line>0?'+':''}${line}`, modelProb, odd, 'handicap', `Margem projetada para ${team}: ${projMarginTeam>0?'+':''}${projMarginTeam.toFixed(1)} pontos (desvio real da liga: ±${v.sd_margin}, de ${v.n_games} jogos).`);
     return;
   }
@@ -1260,6 +1267,7 @@ async function checkValue(){
     const projTeam = isA ? expA : expB;
     const probOver = 1 - normalCdf(line, projTeam, v.sd_team_score);
     const modelProb = side === 'over' ? probOver : (1 - probOver);
+    LAST_VALUE_CHECK = {marketType:'Total por Equipa', team, line, side, odd, gameId:linkedGameId};
     await renderValueResult(wrap, `${team} ${side==='over'?'Over':'Under'} ${line}`, modelProb, odd, 'teamtotal', `Projeção do modelo para ${team}: ~${projTeam.toFixed(1)} pontos (desvio real por equipa: ±${v.sd_team_score}, de ${v.n_games} jogos).`);
     return;
   }
@@ -1318,6 +1326,8 @@ async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNo
     </div>
     ${extraNote ? `<div class="sub" style="margin-top:12px; margin-bottom:0;">${extraNote}</div>` : ''}
     <div class="matchup-banner" style="margin-top:14px;">${calibNote}</div>
+    ${(edgePts >= 2 && LAST_VALUE_CHECK?.gameId) ? `<button class="primary" style="margin-top:12px;" onclick="sendValueCheckToBetForm()">💰 Registar esta aposta</button>` : ''}
+    ${(edgePts >= 2 && !LAST_VALUE_CHECK?.gameId) ? `<div class="sub" style="margin-top:12px; margin-bottom:0;">Sem jogo agendado entre estas equipas ainda — não dá para ligar a aposta a um jogo para conferência automática.</div>` : ''}
     <div class="note">Nota: as odds das casas já têm margem embutida (tipicamente 5-8% acima de 100% somando os dois lados) — uma diferença pequena (0-2 pts) é normalmente ruído, não vantagem real.</div>
   `;
 }
@@ -1414,6 +1424,32 @@ async function loadBankroll(){
         <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Total apostado</span><span class="cc-val">€${data.total_staked ?? 0}</span></div>
       </div>
     </div>`;
+}
+
+async function sendValueCheckToBetForm(){
+  if(!LAST_VALUE_CHECK || !LAST_VALUE_CHECK.gameId) return;
+
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="registo"]').classList.add('active');
+  document.getElementById('tab-registo').classList.add('active');
+
+  if(!BET_GAMES.length) await populateBetGameSelect();
+  const gameId = String(LAST_VALUE_CHECK.gameId);
+  if(!BET_GAMES.find(g=>String(g.id)===gameId)){
+    showMsg(document.getElementById('betMsg'), 'err', 'Esse jogo já não está na lista de jogos próximos.');
+    return;
+  }
+  document.getElementById('betGameSelect').value = gameId;
+  onBetGameChange();
+  document.getElementById('betMarketType').value = LAST_VALUE_CHECK.marketType;
+  onBetMarketChange();
+  if(LAST_VALUE_CHECK.team) document.getElementById('betTeam').value = LAST_VALUE_CHECK.team;
+  if(LAST_VALUE_CHECK.line != null) document.getElementById('betLine').value = LAST_VALUE_CHECK.line;
+  if(LAST_VALUE_CHECK.side) document.getElementById('betSide').value = LAST_VALUE_CHECK.side;
+  document.getElementById('betOdds').value = LAST_VALUE_CHECK.odd;
+  document.getElementById('betStake').focus();
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 async function populateBetGameSelect(){
