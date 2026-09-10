@@ -248,6 +248,10 @@
     #kobeFab{ right:16px; bottom:16px; }
   }
 
+  #staleDataBanner{
+    padding:10px 20px; background:rgba(240,187,62,0.12); border-bottom:1px solid rgba(240,187,62,0.35);
+    color:var(--gold); font-size:12.5px; display:flex; align-items:center; gap:8px;
+  }
   #upcomingTicker{
     display:flex; gap:0; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
     border-bottom:1px solid var(--line); background:var(--bg-2);
@@ -340,6 +344,7 @@
     <button class="ghost" onclick="doSignOut()">Sair</button>
   </header>
 
+  <div id="staleDataBanner" style="display:none;"></div>
   <div id="upcomingTicker"></div>
 
   <div class="wrap">
@@ -700,6 +705,7 @@ async function enterApp(){
     await loadCalendar();
     await loadStandings();
     await loadCalibration();
+    await checkStaleData();
     await loadBankroll();
     await loadBetsList();
     await populateBetGameSelect();
@@ -1441,6 +1447,20 @@ async function renderTrends(a, b){
   }
   wrap.innerHTML = block(a, tta) + block(b, ttb);
   LAST_TRENDS = { a: tta, b: ttb };
+}
+
+async function checkStaleData(){
+  const banner = document.getElementById('staleDataBanner');
+  const {data} = await sb.from('app_meta').select('updated_at').eq('key','last_manual_update').single();
+  if(!data){ banner.style.display = 'none'; return; }
+  const hoursSince = (Date.now() - new Date(data.updated_at).getTime()) / 3600000;
+  if(hoursSince >= 48){
+    const days = Math.floor(hoursSince/24);
+    banner.style.display = 'flex';
+    banner.innerHTML = `<svg width="16" height="18" viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="6" r="5" fill="#9C6B47"/><path d="M13 10 L9 13 L5 12 L3 17 L8 20 L8 34 L24 34 L24 20 L29 17 L27 12 L23 13 L19 10 L16 13 Z" fill="#552583" stroke="#FDB927" stroke-width="1.4" stroke-linejoin="round"/></svg> <b>Kobe:</b> já lá vão ${days}+ dias desde a última atualização de transferências/treinadores/lesões — pede-me "atualiza os dados" quando quiseres.`;
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 async function loadCalibration(){
