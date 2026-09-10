@@ -1965,7 +1965,16 @@ function renderStandings(rows){
     let html = `<h3 style="font-size:14px; color:var(--ink-dim); margin:16px 0 8px;">${conf==='East' ? 'Conferência Este' : 'Conferência Oeste'}</h3>`;
     html += '<table><thead><tr><th>#</th><th>Equipa</th><th>V</th><th>D</th><th>%</th></tr></thead><tbody>';
     rs.forEach((r,i)=>{
-      html += `<tr><td class="num">${i+1}</td><td class="name-cell">${teamPill(r.team_code)} ${r.name}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.win_pct!=null ? (r.win_pct*100).toFixed(1)+'%' : '—'}</td></tr>`;
+      const seed = i+1;
+      const playInZone = seed>=7 && seed<=10;
+      const rowStyle = playInZone ? ' style="background:rgba(240,187,62,0.06);"' : '';
+      html += `<tr${rowStyle}><td class="num">${seed}</td><td class="name-cell">${teamPill(r.team_code)} ${r.name}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.win_pct!=null ? (r.win_pct*100).toFixed(1)+'%' : '—'}</td></tr>`;
+      if(seed===6){
+        html += `<tr><td colspan="5" style="padding:2px 10px; border-bottom:2px solid var(--teal); font-size:10px; color:var(--teal); font-family:'Roboto Mono',monospace;">— lugar direto nos playoffs (1-6) —</td></tr>`;
+      }
+      if(seed===10){
+        html += `<tr><td colspan="5" style="padding:2px 10px; border-bottom:2px solid var(--line); font-size:10px; color:var(--ink-dim); font-family:'Roboto Mono',monospace;">— fim do play-in (7-10) —</td></tr>`;
+      }
     });
     html += '</tbody></table>';
     return html;
