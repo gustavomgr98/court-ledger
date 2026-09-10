@@ -1905,6 +1905,53 @@ function addChatBubble(role, text, isLoading){
   return div;
 }
 
+function addKobeActionBubble(text, action){
+  const log = document.getElementById('chatLog');
+  const div = document.createElement('div');
+  div.className = 'chat-bubble bot';
+  const p = document.createElement('div');
+  p.textContent = text;
+  div.appendChild(p);
+  const actionsRow = document.createElement('div');
+  actionsRow.style.cssText = 'display:flex; gap:8px; margin-top:10px;';
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'primary';
+  confirmBtn.style.cssText = 'padding:6px 12px; font-size:12px;';
+  confirmBtn.textContent = 'Confirmar';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'ghost';
+  cancelBtn.style.cssText = 'padding:6px 12px; font-size:12px;';
+  cancelBtn.textContent = 'Cancelar';
+  confirmBtn.onclick = async () => {
+    confirmBtn.disabled = true; cancelBtn.disabled = true;
+    confirmBtn.textContent = 'A aplicar…';
+    const {error} = await sb.from('players').update({is_available: action.isAvailable}).eq('id', action.playerId);
+    if(error){
+      confirmBtn.textContent = 'Erro';
+      addChatBubble('bot', 'Não consegui aplicar: ' + error.message);
+      return;
+    }
+    actionsRow.innerHTML = '';
+    const doneMsg = document.createElement('div');
+    doneMsg.style.cssText = 'font-size:12px; color:var(--teal);';
+    doneMsg.textContent = `✓ ${action.playerName} marcado como ${action.isAvailable?'disponível':'indisponível'}.`;
+    div.appendChild(doneMsg);
+    // atualiza qualquer vista de comparacao aberta, se as equipas envolvidas estiverem selecionadas
+    const p2 = ALL_PLAYERS.find(x=>x.id===action.playerId);
+    if(p2) p2.is_available = action.isAvailable;
+    if(document.getElementById('cmpA').value && document.getElementById('cmpB').value){
+      renderCourtsForBothTeams();
+      onTeamsChanged();
+    }
+  };
+  cancelBtn.onclick = () => { actionsRow.remove(); addChatBubble('bot', 'Ok, não fiz nenhuma alteração.'); };
+  actionsRow.appendChild(confirmBtn);
+  actionsRow.appendChild(cancelBtn);
+  div.appendChild(actionsRow);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
 function toggleKobe(){
   document.getElementById('kobePanel').classList.toggle('open');
 }
@@ -2023,6 +2070,9 @@ async function sendChatMessage(){
     loadingEl.remove();
     if(data.error){
       addChatBubble('bot', 'Erro: ' + data.error);
+    } else if(data.proposedAction){
+      addKobeActionBubble(data.text || '(sem resposta)', data.proposedAction);
+      CHAT_HISTORY.push({role:'assistant', text: data.text || ''});
     } else {
       addChatBubble('bot', data.text || '(sem resposta)');
       CHAT_HISTORY.push({role:'assistant', text: data.text || ''});
