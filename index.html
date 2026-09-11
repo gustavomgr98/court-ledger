@@ -1630,6 +1630,10 @@ async function showBreakevenReference(){
   if(!result){ box.innerHTML = ''; return; }
   const { modelProb } = result;
   const fairOdd = 1 / modelProb;
+  if(modelProb <= 0.03){
+    box.innerHTML = `<div class="matchup-banner" style="margin-top:10px;">📐 <b>Odd justa (modelo): ${fairOdd.toFixed(2)}</b> — probabilidade muito baixa/extrema, os limiares de valor não são fiáveis aqui.</div>`;
+    return;
+  }
   const marginalOdd = 1 / (modelProb - 0.02);
   const clearOdd = 1 / (modelProb - 0.05);
   box.innerHTML = `<div class="matchup-banner" style="margin-top:10px;">
