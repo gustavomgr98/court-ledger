@@ -1881,12 +1881,18 @@ function onBetMarketChange(){
   document.getElementById('betLineLabel').textContent = mkt === 'Handicap' ? 'Handicap (ex: -3.5)' : 'Linha';
 }
 
+const REGISTERED_BY_NAMES = { 'gustavomgr98@gmail.com': 'Gustavo', 'goncalomfac@gmail.com': 'Gonçalo' };
+async function getRegisteredByName(){
+  const {data: {user}} = await sb.auth.getUser();
+  return REGISTERED_BY_NAMES[user?.email] || user?.email || 'Desconhecido';
+}
+
 async function loadBetsList(){
   const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:false}).limit(30);
   const wrap = document.getElementById('betsListWrap');
   if(!data || !data.length){ wrap.innerHTML = ''; return; }
   const resultLabel = {pending:'Pendente', won:'Ganhou', lost:'Perdeu', void:'Anulada'};
-  wrap.innerHTML = '<table><thead><tr><th>Data</th><th>Jogo</th><th>Mercado</th><th>Escolha</th><th>Odd</th><th>Stake</th><th>Resultado</th><th></th></tr></thead><tbody>' +
+  wrap.innerHTML = '<table><thead><tr><th>Data</th><th>Quem</th><th>Jogo</th><th>Mercado</th><th>Escolha</th><th>Odd</th><th>Stake</th><th>Resultado</th><th></th></tr></thead><tbody>' +
     data.map(b=>{
       const pickLabel = b.market_type==='Outro' ? b.pick
         : b.market_type==='Vencedor' ? b.team
@@ -1894,7 +1900,7 @@ async function loadBetsList(){
         : `${b.team?b.team+' ':''}${b.side==='over'?'Over':'Under'} ${b.line}`;
       const badge = b.auto_resolved ? ' <span style="opacity:0.6; font-size:10px;">(auto)</span>' : '';
       return `<tr>
-        <td class="num">${b.placed_at}</td><td>${b.matchup||'—'}</td><td>${b.market_type}</td><td>${pickLabel}</td>
+        <td class="num">${b.placed_at}</td><td>${b.registered_by||'—'}</td><td>${b.matchup||'—'}</td><td>${b.market_type}</td><td>${pickLabel}</td>
         <td class="num">${b.odds||'—'}</td><td class="num">€${b.stake}</td>
         <td>${resultLabel[b.result]||b.result}${badge}
           ${b.result==='pending' && !b.game_id ? `<select onchange="updateBetResult(${b.id}, this.value, ${b.stake}, ${b.odds||'null'})" style="width:auto; padding:2px 6px; font-size:10.5px; margin-left:4px;">
@@ -1915,6 +1921,7 @@ async function submitBet(){
   if(mkt !== 'Outro' && !gameId){ showMsg(msg,'err','Escolhe um jogo (ou usa "Outro" para apostas sem jogo ligado).'); return; }
 
   const game = BET_GAMES.find(g=>String(g.id)===gameId);
+  const registeredBy = await getRegisteredByName();
   const payload = {
     game_id: gameId || null,
     matchup: game ? `${game.away_team} @ ${game.home_team}` : null,
@@ -1925,6 +1932,7 @@ async function submitBet(){
     pick: mkt === 'Outro' ? document.getElementById('betPick').value.trim() : null,
     odds: parseFloat(document.getElementById('betOdds').value) || null,
     stake,
+    registered_by: registeredBy,
     placed_at: game ? game.game_date : new Date().toISOString().slice(0,10)
   };
   const {error} = await sb.from('bets').insert(payload);
@@ -1953,10 +1961,10 @@ async function deleteBet(id){
 async function exportBetsCSV(){
   const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:true});
   if(!data || !data.length){ alert('Sem apostas para exportar.'); return; }
-  const headers = ['Data','Confronto','Mercado','Equipa','Linha','Lado','Odd','Stake','Resultado','Lucro/Prejuizo','Auto'];
+  const headers = ['Data','Quem','Confronto','Mercado','Equipa','Linha','Lado','Odd','Stake','Resultado','Lucro/Prejuizo','Auto'];
   const csvEscape = (v)=> `"${String(v==null?'':v).replace(/"/g,'""')}"`;
   const rows = data.map(b => [
-    b.placed_at, b.matchup||b.pick||'', b.market_type, b.team||'', b.line??'', b.side||'',
+    b.placed_at, b.registered_by||'', b.matchup||b.pick||'', b.market_type, b.team||'', b.line??'', b.side||'',
     b.odds??'', b.stake, b.result, b.profit_loss??'', b.auto_resolved?'Sim':'Não'
   ].map(csvEscape).join(','));
   const csv = [headers.map(csvEscape).join(','), ...rows].join('\n');
