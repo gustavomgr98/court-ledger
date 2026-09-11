@@ -549,6 +549,16 @@
       </div>
 
       <div class="panel">
+        <h2>Comparação Individual</h2>
+        <div class="sub">Compara dois jogadores diretamente, um de cada equipa — útil para confrontos de posição (ex: os dois bases titulares).</div>
+        <div class="grid2">
+          <div class="field"><label id="playerLabelA">Jogador (Equipa A)</label><select id="playerSelectA" onchange="renderPlayerComparison()"></select></div>
+          <div class="field"><label id="playerLabelB">Jogador (Equipa B)</label><select id="playerSelectB" onchange="renderPlayerComparison()"></select></div>
+        </div>
+        <div id="playerComparisonWrap"></div>
+      </div>
+
+      <div class="panel">
         <h2>Rating atual <span class="season-pill s2627">plantel de hoje</span></h2>
         <div id="cmpDataSource"></div>
         <div id="cmpTableBlendedWrap"></div>
@@ -904,6 +914,47 @@ function computeLeagueAverages(allRatings){
   };
 }
 
+function renderPlayerComparison(){
+  const wrap = document.getElementById('playerComparisonWrap');
+  const selA = document.getElementById('playerSelectA'), selB = document.getElementById('playerSelectB');
+  if(!selA || !selB || !selA.value || !selB.value){ if(wrap) wrap.innerHTML=''; return; }
+  const pA = LAST_ROSTER_RAW.A.find(p=>String(p.player_id)===selA.value);
+  const pB = LAST_ROSTER_RAW.B.find(p=>String(p.player_id)===selB.value);
+  if(!pA || !pB){ wrap.innerHTML = '<div class="empty">Escolhe um jogador de cada equipa.</div>'; return; }
+
+  const tsA = pA.pts / (2*((pA.fga||0) + 0.44*(pA.fta||0))) || 0;
+  const tsB = pB.pts / (2*((pB.fga||0) + 0.44*(pB.fta||0))) || 0;
+
+  const rows = [
+    ['Minutos/Jog', pA.minutes, pB.minutes, 1, false],
+    ['PTS/Jog', pA.pts, pB.pts, 1, false],
+    ['REB/Jog', pA.trb, pB.trb, 1, false],
+    ['AST/Jog', pA.ast, pB.ast, 1, false],
+    ['Roubos/Jog', pA.stl, pB.stl, 1, false],
+    ['Desarmes/Jog', pA.blk, pB.blk, 1, false],
+    ['Perdas/Jog', pA.tov, pB.tov, 1, true],
+    ['FG%', pA.fg_pct, pB.fg_pct, 100, false],
+    ['3P%', pA.p3_pct, pB.p3_pct, 100, false],
+    ['TS%', tsA, tsB, 100, false],
+  ];
+  let html = `<div class="sub" style="margin-top:14px;">
+    <b>${pA.player_name}</b>: ${pA.source_season==='blend' ? Math.round((pA.blend_weight_2627||0)*100)+'% 26-27' : (pA.source_season==='2026-27'?'26-27':'25-26')} como base ${pA.is_transferred?' · <span style="color:var(--teal);">transferido</span>':''}.<br>
+    <b>${pB.player_name}</b>: ${pB.source_season==='blend' ? Math.round((pB.blend_weight_2627||0)*100)+'% 26-27' : (pB.source_season==='2026-27'?'26-27':'25-26')} como base ${pB.is_transferred?' · <span style="color:var(--teal);">transferido</span>':''}.
+  </div>`;
+  html += `<table class="cmp-table" style="margin-top:10px;"><thead><tr><th>Métrica</th><th>${pA.player_name.split(' ').pop()}</th><th>${pB.player_name.split(' ').pop()}</th><th>Dif.</th></tr></thead><tbody>`;
+  rows.forEach(([label, va, vb, mult, invert])=>{
+    va = va||0; vb = vb||0;
+    const diff = va-vb;
+    const colorDiff = invert ? -diff : diff;
+    const cls = colorDiff>0 ? 'diff-pos' : colorDiff<0 ? 'diff-neg' : '';
+    const suf = mult===100 ? '%':'';
+    const f = (x)=> mult===100 ? (x*100).toFixed(1) : x.toFixed(1);
+    html += `<tr><td>${label}</td><td class="num">${f(va)}${suf}</td><td class="num">${f(vb)}${suf}</td><td class="num ${cls}">${diff>0?'+':''}${f(diff)}${suf}</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
 function renderBlendedTable(a, b, ra, rb){
   const srcWrap = document.getElementById('cmpDataSource');
   const wrap = document.getElementById('cmpTableBlendedWrap');
@@ -1124,6 +1175,7 @@ let LAST_TRANSFERS = null;
 let LAST_FORM = null;
 let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
+let LAST_ROSTER_RAW = {A: [], B: []};
 let LAST_VALUE_CHECK = null;
 let BET_GAMES = [];
 
@@ -1793,7 +1845,7 @@ async function getRosterForTeam(teamCode){
     blendPct: Math.round((s.blend_weight_2627||0)*100),
     is_transferred: s.is_transferred
   })).sort((x,y)=> y.minutes - x.minutes);
-  return { season: 'atual', players };
+  return { season: 'atual', players, raw: (data||[]).sort((x,y)=> (y.minutes||0)-(x.minutes||0)) };
 }
 
 const POSITION_GROUPS = { PG:'G', SG:'G', SF:'F', PF:'F', C:'C' };
@@ -1913,7 +1965,12 @@ async function renderCourtsForBothTeams(){
     document.getElementById('courtLabel'+side).innerHTML = `${teamPill(code)} ${getTeamName(code)}${coachRow ? ' <span style="opacity:0.6; font-size:11px; font-family:Roboto Mono,monospace;">· treinador: '+coachRow.coach_name+'</span>' : ''}`;
     document.getElementById('court'+side).innerHTML = `<div class="court-svg-wrap">${courtSVG(starters, code, coachRow?.coach_name)}</div>`;
     renderRosterList(side, code, roster);
+    LAST_ROSTER_RAW[side] = roster.raw;
+    const sel = document.getElementById('playerSelect'+side);
+    document.getElementById('playerLabel'+side).textContent = `Jogador (${code})`;
+    sel.innerHTML = roster.raw.map(p=>`<option value="${p.player_id}">${p.player_name} (${p.position||'?'}, ${fmt1(p.minutes)} min)</option>`).join('');
   }));
+  renderPlayerComparison();
 }
 
 let ALL_GAMES = [];
