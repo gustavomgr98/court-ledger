@@ -1215,6 +1215,17 @@ async function onTeamsChanged(){
   await renderFormAndHistory();
 }
 
+function buildPlayerComparisonText(){
+  const selA = document.getElementById('playerSelectA'), selB = document.getElementById('playerSelectB');
+  if(!selA || !selB || !selA.value || !selB.value) return '';
+  const pA = LAST_ROSTER_RAW.A.find(p=>String(p.player_id)===selA.value);
+  const pB = LAST_ROSTER_RAW.B.find(p=>String(p.player_id)===selB.value);
+  if(!pA || !pB) return '';
+  const tsA = pA.pts / (2*((pA.fga||0) + 0.44*(pA.fta||0))) || 0;
+  const tsB = pB.pts / (2*((pB.fga||0) + 0.44*(pB.fta||0))) || 0;
+  return `COMPARAÇÃO INDIVIDUAL SELECIONADA (${pA.position||'?'} vs ${pB.position||'?'}): ${pA.player_name} — ${pA.minutes.toFixed(1)} min, ${pA.pts.toFixed(1)} PTS, ${pA.trb.toFixed(1)} REB, ${pA.ast.toFixed(1)} AST, ${pA.stl.toFixed(1)} ROU, ${pA.blk.toFixed(1)} DES, ${pA.tov.toFixed(1)} PER, ${(tsA*100).toFixed(1)}% TS. VS ${pB.player_name} — ${pB.minutes.toFixed(1)} min, ${pB.pts.toFixed(1)} PTS, ${pB.trb.toFixed(1)} REB, ${pB.ast.toFixed(1)} AST, ${pB.stl.toFixed(1)} ROU, ${pB.blk.toFixed(1)} DES, ${pB.tov.toFixed(1)} PER, ${(tsB*100).toFixed(1)}% TS.\n`;
+}
+
 async function renderKobeReading(){
   const el = document.getElementById('kobeMatchupReading');
   if(!el || !LAST_RATINGS || !LAST_RATINGS.a || !LAST_RATINGS.b) return;
@@ -1233,6 +1244,7 @@ async function renderKobeReading(){
   if(tb) prompt += `TENDÊNCIAS ${b}: depois de derrota ${tb.after_loss_record||'sem dados'}, back-to-back ${tb.b2b_record||'sem dados'}.\n`;
   if(LAST_TRANSFERS?.a?.length) prompt += `TRANSFERÊNCIAS RECENTES PARA ${a}: ${LAST_TRANSFERS.a.map(t=>`${t.player_name} (ex-${t.original_team_2526}, ${t.pts.toFixed(1)} PTS/jogo)`).join(', ')}.\n`;
   if(LAST_TRANSFERS?.b?.length) prompt += `TRANSFERÊNCIAS RECENTES PARA ${b}: ${LAST_TRANSFERS.b.map(t=>`${t.player_name} (ex-${t.original_team_2526}, ${t.pts.toFixed(1)} PTS/jogo)`).join(', ')}.\n`;
+  prompt += buildPlayerComparisonText();
   if(mc?.hasGame){
     prompt += `JOGO AGENDADO: ${mc.dateLabel}, ${mc.awayTeam} @ ${mc.homeTeam}.\n`;
     if(mc.infoA) prompt += `Contexto ${a}: ${mc.infoA.restDays!=null ? mc.infoA.restDays+' dias de descanso'+(mc.infoA.backToBack?' (back-to-back)':'') : 'sem dados de descanso'}, ${mc.infoA.travelKm}km de viagem.\n`;
@@ -2250,6 +2262,7 @@ async function askKobeAboutMatchup(){
   if(LAST_WINPROB) prompt += `Probabilidade de vitória do modelo: ${a} ${(LAST_WINPROB.pA*100).toFixed(1)}% vs ${b} ${(LAST_WINPROB.pB*100).toFixed(1)}%.\n`;
   if(fa) prompt += `Forma recente ${a}: ${fa.wins}V-${fa.losses}D, sequência ${fa.results}, diferencial ponderado ${fa.weighted_margin}.\n`;
   if(fb) prompt += `Forma recente ${b}: ${fb.wins}V-${fb.losses}D, sequência ${fb.results}, diferencial ponderado ${fb.weighted_margin}.\n`;
+  prompt += buildPlayerComparisonText();
   prompt += `\nEscreve 2-3 parágrafos curtos, sem repetir os números todos em lista — conta a história do confronto: quem está favorito e porquê, o ponto mais interessante, e um alerta se a amostra for pequena.`;
 
   document.getElementById('kobePanel').classList.add('open');
