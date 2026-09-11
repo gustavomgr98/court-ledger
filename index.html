@@ -550,7 +550,16 @@
 
       <div class="panel">
         <h2>Comparação Individual</h2>
-        <div class="sub">Compara dois jogadores diretamente, um de cada equipa — útil para confrontos de posição (ex: os dois bases titulares).</div>
+        <div class="sub">Compara dois jogadores diretamente, um de cada equipa — por defeito, os dois titulares da mesma posição.</div>
+        <div class="field"><label>Confronto por posição</label>
+          <select id="positionQuickSelect" onchange="setPlayersByPosition(this.value)">
+            <option value="PG">Base (PG)</option>
+            <option value="SG">Escolta (SG)</option>
+            <option value="SF">Ala (SF)</option>
+            <option value="PF">Ala-poste (PF)</option>
+            <option value="C">Poste (C)</option>
+          </select>
+        </div>
         <div class="grid2">
           <div class="field"><label id="playerLabelA">Jogador (Equipa A)</label><select id="playerSelectA" onchange="renderPlayerComparison()"></select></div>
           <div class="field"><label id="playerLabelB">Jogador (Equipa B)</label><select id="playerSelectB" onchange="renderPlayerComparison()"></select></div>
@@ -914,6 +923,14 @@ function computeLeagueAverages(allRatings){
   };
 }
 
+function setPlayersByPosition(pos){
+  const starterA = LAST_STARTERS.A?.[pos];
+  const starterB = LAST_STARTERS.B?.[pos];
+  if(starterA) document.getElementById('playerSelectA').value = String(starterA.id);
+  if(starterB) document.getElementById('playerSelectB').value = String(starterB.id);
+  renderPlayerComparison();
+}
+
 function renderPlayerComparison(){
   const wrap = document.getElementById('playerComparisonWrap');
   const selA = document.getElementById('playerSelectA'), selB = document.getElementById('playerSelectB');
@@ -1176,6 +1193,7 @@ let LAST_FORM = null;
 let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
 let LAST_ROSTER_RAW = {A: [], B: []};
+let LAST_STARTERS = {A: {}, B: {}};
 let LAST_VALUE_CHECK = null;
 let BET_GAMES = [];
 
@@ -1966,9 +1984,14 @@ async function renderCourtsForBothTeams(){
     document.getElementById('court'+side).innerHTML = `<div class="court-svg-wrap">${courtSVG(starters, code, coachRow?.coach_name)}</div>`;
     renderRosterList(side, code, roster);
     LAST_ROSTER_RAW[side] = roster.raw;
+    LAST_STARTERS[side] = starters;
     const sel = document.getElementById('playerSelect'+side);
     document.getElementById('playerLabel'+side).textContent = `Jogador (${code})`;
     sel.innerHTML = roster.raw.map(p=>`<option value="${p.player_id}">${p.player_name} (${p.position||'?'}, ${fmt1(p.minutes)} min)</option>`).join('');
+    // por defeito, compara os titulares da MESMA posicao (ex: base vs base) em vez de so quem tem mais minutos —
+    // uma comparacao entre posicoes diferentes (ex: base vs poste) diz muito menos.
+    const starterPG = starters['PG'];
+    if(starterPG) sel.value = String(starterPG.id);
   }));
   renderPlayerComparison();
 }
