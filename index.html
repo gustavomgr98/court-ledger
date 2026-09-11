@@ -518,14 +518,15 @@
               <option value="teamtotal">Total por Equipa</option>
             </select>
           </div>
-          <div class="field" id="valueTeamField" style="flex:1;"><label>Equipa</label><select id="valueTeamSelect"></select></div>
+          <div class="field" id="valueTeamField" style="flex:1;"><label>Equipa</label><select id="valueTeamSelect" onchange="showBreakevenReference()"></select></div>
         </div>
         <div id="valueLineField" style="display:none; gap:14px;">
-          <div class="field" style="flex:1;"><label id="valueLineLabel">Linha</label><input id="valueLineInput" type="number" step="0.5" placeholder="ex: 226.5"></div>
+          <div class="field" style="flex:1;"><label id="valueLineLabel">Linha</label><input id="valueLineInput" type="number" step="0.5" placeholder="ex: 226.5" oninput="showBreakevenReference()"></div>
           <div class="field" id="valueSideField" style="display:none; flex:1;"><label>Lado</label>
-            <select id="valueSideSelect"><option value="over">Over</option><option value="under">Under</option></select>
+            <select id="valueSideSelect" onchange="showBreakevenReference()"><option value="over">Over</option><option value="under">Under</option></select>
           </div>
         </div>
+        <div id="breakevenRef"></div>
         <div class="field"><label>Odd (decimal, ex: 1.90)</label><input id="valueOddInput" type="number" step="0.01" placeholder="1.90"></div>
         <button class="primary" onclick="checkValue()">Verificar</button>
         <div id="valueResultWrap" style="margin-top:16px;"></div>
@@ -1555,6 +1556,7 @@ function onValueMarketChange(){
   document.getElementById('valueSideField').style.display = (mkt==='total' || mkt==='teamtotal') ? 'block' : 'none';
   document.getElementById('valueLineLabel').textContent = (mkt==='total') ? 'Linha (total combinado)' : (mkt==='handicap' ? 'Handicap da equipa (ex: -3.5)' : (mkt==='teamtotal' ? 'Linha (pontos da equipa)' : 'Linha'));
   document.getElementById('valueResultWrap').innerHTML = '';
+  showBreakevenReference();
 }
 
 // aproximacao da funcao erro, para converter media+desvio-padrao em probabilidade (distribuicao normal)
@@ -1567,6 +1569,76 @@ function erf(x){
 }
 function normalCdf(x, mean, sd){ return 0.5*(1+erf((x-mean)/(sd*Math.sqrt(2)))); }
 
+async function computeCurrentModelProb(){
+  const mkt = document.getElementById('valueMarketType').value;
+  if(!LAST_WINPROB || !LAST_VALUE_MATCHUP) return null;
+
+  if(mkt === 'vencedor'){
+    const team = document.getElementById('valueTeamSelect').value;
+    const modelProb = (team === LAST_WINPROB.a) ? LAST_WINPROB.pA : LAST_WINPROB.pB;
+    return { label: team, modelProb, marketKey: 'vencedor', extraNote: null };
+  }
+
+  const {data: varData} = await sb.rpc('get_scoring_variance');
+  const v = varData?.[0];
+  if(!v || !v.n_games) return null;
+  if(!LAST_FORM || !LAST_FORM.a || !LAST_FORM.b) return null;
+  const expA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
+  const expB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+
+  if(mkt === 'total'){
+    const line = parseFloat(document.getElementById('valueLineInput').value);
+    const side = document.getElementById('valueSideSelect').value;
+    if(!line) return null;
+    const projTotal = expA + expB;
+    const probOver = 1 - normalCdf(line, projTotal, v.sd_total);
+    const modelProb = side === 'over' ? probOver : (1 - probOver);
+    return { label: `${side==='over'?'Over':'Under'} ${line}`, modelProb, marketKey: 'total',
+      extraNote: `Projeção do modelo: ~${projTotal.toFixed(1)} pontos (desvio real da liga: ±${v.sd_total}, de ${v.n_games} jogos).` };
+  }
+
+  if(mkt === 'handicap'){
+    const team = document.getElementById('valueTeamSelect').value;
+    const line = parseFloat(document.getElementById('valueLineInput').value);
+    if(isNaN(line)) return null;
+    const isA = team === LAST_VALUE_MATCHUP.a;
+    const projMarginTeam = isA ? (expA - expB) : (expB - expA);
+    const modelProb = 1 - normalCdf(-line, projMarginTeam, v.sd_margin);
+    return { label: `${team} ${line>0?'+':''}${line}`, modelProb, marketKey: 'handicap',
+      extraNote: `Margem projetada para ${team}: ${projMarginTeam>0?'+':''}${projMarginTeam.toFixed(1)} pontos (desvio real da liga: ±${v.sd_margin}, de ${v.n_games} jogos).` };
+  }
+
+  if(mkt === 'teamtotal'){
+    const team = document.getElementById('valueTeamSelect').value;
+    const line = parseFloat(document.getElementById('valueLineInput').value);
+    const side = document.getElementById('valueSideSelect').value;
+    if(!line) return null;
+    const isA = team === LAST_VALUE_MATCHUP.a;
+    const projTeam = isA ? expA : expB;
+    const probOver = 1 - normalCdf(line, projTeam, v.sd_team_score);
+    const modelProb = side === 'over' ? probOver : (1 - probOver);
+    return { label: `${team} ${side==='over'?'Over':'Under'} ${line}`, modelProb, marketKey: 'teamtotal',
+      extraNote: `Projeção do modelo para ${team}: ~${projTeam.toFixed(1)} pontos (desvio real por equipa: ±${v.sd_team_score}, de ${v.n_games} jogos).` };
+  }
+  return null;
+}
+
+async function showBreakevenReference(){
+  const box = document.getElementById('breakevenRef');
+  if(!box) return;
+  const result = await computeCurrentModelProb();
+  if(!result){ box.innerHTML = ''; return; }
+  const { modelProb } = result;
+  const fairOdd = 1 / modelProb;
+  const marginalOdd = 1 / (modelProb - 0.02);
+  const clearOdd = 1 / (modelProb - 0.05);
+  box.innerHTML = `<div class="matchup-banner" style="margin-top:10px;">
+    📐 <b>Odd justa (modelo): ${fairOdd.toFixed(2)}</b> — sem vantagem nem desvantagem.<br>
+    A partir de <b style="color:var(--teal);">${marginalOdd.toFixed(2)}</b> já é valor marginal · a partir de <b style="color:var(--teal);">${clearOdd.toFixed(2)}</b> é valor claro.<br>
+    <span style="opacity:0.7;">Abaixo de ${fairOdd.toFixed(2)}, a casa está mais otimista que o modelo — sem valor.</span>
+  </div>`;
+}
+
 async function checkValue(){
   const wrap = document.getElementById('valueResultWrap');
   const mkt = document.getElementById('valueMarketType').value;
@@ -1574,64 +1646,23 @@ async function checkValue(){
   if(!odd || odd <= 1){ wrap.innerHTML = '<div class="empty">Mete uma odd decimal válida (ex: 1.90).</div>'; return; }
   if(!LAST_WINPROB){ wrap.innerHTML = '<div class="empty">Sem dados do modelo disponíveis para este confronto.</div>'; return; }
 
+  const result = await computeCurrentModelProb();
+  if(!result){
+    wrap.innerHTML = '<div class="empty">Preenche os campos do mercado (linha, equipa, etc.) antes de verificar.</div>';
+    return;
+  }
+
   const {data: nm} = await sb.rpc('next_matchup', {p_team_a: LAST_VALUE_MATCHUP.a, p_team_b: LAST_VALUE_MATCHUP.b});
   const linkedGameId = nm?.[0]?.game_id || null;
+  const team = (mkt==='vencedor'||mkt==='handicap'||mkt==='teamtotal') ? document.getElementById('valueTeamSelect').value : null;
+  const line = (mkt==='total'||mkt==='handicap'||mkt==='teamtotal') ? parseFloat(document.getElementById('valueLineInput').value) : null;
+  const side = (mkt==='total'||mkt==='teamtotal') ? document.getElementById('valueSideSelect').value : null;
 
-  if(mkt === 'vencedor'){
-    const team = document.getElementById('valueTeamSelect').value;
-    const modelProb = (team === LAST_WINPROB.a) ? LAST_WINPROB.pA : LAST_WINPROB.pB;
-    LAST_VALUE_CHECK = {marketType:'Vencedor', team, line:null, side:null, odd, gameId:linkedGameId};
-    await renderValueResult(wrap, team, modelProb, odd, 'vencedor');
-    return;
-  }
-
-  const {data: varData} = await sb.rpc('get_scoring_variance');
-  const v = varData?.[0];
-  if(!v || !v.n_games){ wrap.innerHTML = '<div class="empty">Sem jogos suficientes ainda para estimar a variação real de pontuação.</div>'; return; }
-
-  // projecao de total/margem: reaproveita a forma ponderada ja calculada em renderFormAndHistory
-  if(!LAST_FORM || !LAST_FORM.a || !LAST_FORM.b){ wrap.innerHTML = '<div class="empty">Sem forma recente suficiente para projetar este mercado.</div>'; return; }
-  const expA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
-  const expB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
-
-  if(mkt === 'total'){
-    const line = parseFloat(document.getElementById('valueLineInput').value);
-    const side = document.getElementById('valueSideSelect').value;
-    if(!line){ wrap.innerHTML = '<div class="empty">Mete a linha do total.</div>'; return; }
-    const projTotal = expA + expB;
-    const probOver = 1 - normalCdf(line, projTotal, v.sd_total);
-    const modelProb = side === 'over' ? probOver : (1 - probOver);
-    LAST_VALUE_CHECK = {marketType:'Total pontos', team:null, line, side, odd, gameId:linkedGameId};
-    await renderValueResult(wrap, `${side==='over'?'Over':'Under'} ${line}`, modelProb, odd, 'total', `Projeção do modelo: ~${projTotal.toFixed(1)} pontos (desvio real da liga: ±${v.sd_total}, de ${v.n_games} jogos).`);
-    return;
-  }
-
-  if(mkt === 'handicap'){
-    const team = document.getElementById('valueTeamSelect').value;
-    const line = parseFloat(document.getElementById('valueLineInput').value);
-    if(isNaN(line)){ wrap.innerHTML = '<div class="empty">Mete o handicap (ex: -3.5 ou +5.5).</div>'; return; }
-    const isA = team === LAST_VALUE_MATCHUP.a;
-    const projMarginTeam = isA ? (expA - expB) : (expB - expA);
-    // cobre a linha se a margem real (a favor da equipa) for maior que -linha
-    const modelProb = 1 - normalCdf(-line, projMarginTeam, v.sd_margin);
-    LAST_VALUE_CHECK = {marketType:'Handicap', team, line, side:null, odd, gameId:linkedGameId};
-    await renderValueResult(wrap, `${team} ${line>0?'+':''}${line}`, modelProb, odd, 'handicap', `Margem projetada para ${team}: ${projMarginTeam>0?'+':''}${projMarginTeam.toFixed(1)} pontos (desvio real da liga: ±${v.sd_margin}, de ${v.n_games} jogos).`);
-    return;
-  }
-
-  if(mkt === 'teamtotal'){
-    const team = document.getElementById('valueTeamSelect').value;
-    const line = parseFloat(document.getElementById('valueLineInput').value);
-    const side = document.getElementById('valueSideSelect').value;
-    if(!line){ wrap.innerHTML = '<div class="empty">Mete a linha de pontos da equipa.</div>'; return; }
-    const isA = team === LAST_VALUE_MATCHUP.a;
-    const projTeam = isA ? expA : expB;
-    const probOver = 1 - normalCdf(line, projTeam, v.sd_team_score);
-    const modelProb = side === 'over' ? probOver : (1 - probOver);
-    LAST_VALUE_CHECK = {marketType:'Total por Equipa', team, line, side, odd, gameId:linkedGameId};
-    await renderValueResult(wrap, `${team} ${side==='over'?'Over':'Under'} ${line}`, modelProb, odd, 'teamtotal', `Projeção do modelo para ${team}: ~${projTeam.toFixed(1)} pontos (desvio real por equipa: ±${v.sd_team_score}, de ${v.n_games} jogos).`);
-    return;
-  }
+  LAST_VALUE_CHECK = {
+    marketType: mkt==='vencedor'?'Vencedor':mkt==='total'?'Total pontos':mkt==='handicap'?'Handicap':'Total por Equipa',
+    team, line, side, odd, gameId: linkedGameId
+  };
+  await renderValueResult(wrap, result.label, result.modelProb, odd, result.marketKey, result.extraNote);
 }
 
 async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNote){
