@@ -616,6 +616,7 @@
           <div class="field"><label>Stake (€)</label><input id="betStake" type="number" step="0.01" placeholder="ex: 10"></div>
         </div>
         <button class="primary" onclick="submitBet()">Registar aposta</button>
+        <button class="ghost" style="margin-top:8px;" onclick="exportBetsCSV()">⬇️ Exportar para CSV</button>
         <div id="betsListWrap" style="margin-top:20px;"></div>
       </div>
     </section>
@@ -1684,6 +1685,27 @@ async function updateBetResult(id, result, stake, odds){
 async function deleteBet(id){
   await sb.from('bets').delete().eq('id', id);
   await loadBankroll(); await loadBetsList();
+}
+
+async function exportBetsCSV(){
+  const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:true});
+  if(!data || !data.length){ alert('Sem apostas para exportar.'); return; }
+  const headers = ['Data','Confronto','Mercado','Equipa','Linha','Lado','Odd','Stake','Resultado','Lucro/Prejuizo','Auto'];
+  const csvEscape = (v)=> `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const rows = data.map(b => [
+    b.placed_at, b.matchup||b.pick||'', b.market_type, b.team||'', b.line??'', b.side||'',
+    b.odds??'', b.stake, b.result, b.profit_loss??'', b.auto_resolved?'Sim':'Não'
+  ].map(csvEscape).join(','));
+  const csv = [headers.map(csvEscape).join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `court-ledger-apostas-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function renderMarketSummary(a, b, formA, formB, splitA, splitB){
