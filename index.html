@@ -1770,11 +1770,25 @@ async function getRosterForTeam(teamCode){
   return { season: 'atual', players };
 }
 
+const POSITION_GROUPS = { PG:'G', SG:'G', SF:'F', PF:'F', C:'C' };
+const GROUP_SLOTS = { G:['PG','SG'], F:['SF','PF'], C:['C'] };
+
 function pickStarters(players){
-  const starters = {};
-  POSITIONS.forEach(pos=>{
-    starters[pos] = players.find(p => p.position === pos && p.is_available) || null;
-  });
+  const starters = { PG:null, SG:null, SF:null, PF:null, C:null };
+  const available = players.filter(p=>p.is_available).sort((a,b)=> (b.minutes||0) - (a.minutes||0));
+  for(const p of available){
+    const group = POSITION_GROUPS[p.position];
+    if(!group) continue;
+    const slotsForGroup = GROUP_SLOTS[group];
+    // tenta sempre a posicao exata primeiro; se ja estiver ocupada por alguem com mais minutos,
+    // desliza para a outra posicao do mesmo grupo (base/escolta, ala/poste-baixo) antes de desistir —
+    // tal como um treinador real ajustaria o cinco inicial com alinhamentos flexiveis.
+    const orderedSlots = [p.position, ...slotsForGroup.filter(s=>s!==p.position)];
+    for(const slot of orderedSlots){
+      if(starters[slot] === null){ starters[slot] = p; break; }
+    }
+    if(Object.values(starters).every(s=>s!==null)) break;
+  }
   return starters;
 }
 
