@@ -638,6 +638,22 @@
       </div>
     </section>
 
+    <!-- PERFIL DE EQUIPA -->
+    <section id="tab-teamprofile">
+      <div class="panel">
+        <button class="ghost" onclick="closeProfile()">← Voltar</button>
+        <div id="teamProfileWrap" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
+    <!-- PERFIL DE JOGADOR -->
+    <section id="tab-playerprofile">
+      <div class="panel">
+        <button class="ghost" onclick="closeProfile()">← Voltar</button>
+        <div id="playerProfileWrap" style="margin-top:14px;"></div>
+      </div>
+    </section>
+
     <!-- KOBE: bolha flutuante, visivel em qualquer separador -->
     <button id="kobeFab" onclick="toggleKobe()" aria-label="Abrir o Kobe">
       <svg viewBox="0 0 32 36" xmlns="http://www.w3.org/2000/svg"><circle cx="16" cy="6" r="5" fill="#9C6B47"/><path d="M13 10 L9 13 L5 12 L3 17 L8 20 L8 34 L24 34 L24 20 L29 17 L27 12 L23 13 L19 10 L16 13 Z" fill="#552583" stroke="#FDB927" stroke-width="1.4" stroke-linejoin="round"/><text x="16" y="29" text-anchor="middle" font-family="Oswald,sans-serif" font-weight="700" font-size="10" fill="#FDB927">24</text></svg>
@@ -958,7 +974,7 @@ function renderPlayerComparison(){
     <b>${pA.player_name}</b>: ${pA.source_season==='blend' ? Math.round((pA.blend_weight_2627||0)*100)+'% 26-27' : (pA.source_season==='2026-27'?'26-27':'25-26')} como base ${pA.is_transferred?' · <span style="color:var(--teal);">transferido</span>':''}.<br>
     <b>${pB.player_name}</b>: ${pB.source_season==='blend' ? Math.round((pB.blend_weight_2627||0)*100)+'% 26-27' : (pB.source_season==='2026-27'?'26-27':'25-26')} como base ${pB.is_transferred?' · <span style="color:var(--teal);">transferido</span>':''}.
   </div>`;
-  html += `<table class="cmp-table" style="margin-top:10px;"><thead><tr><th>Métrica</th><th>${pA.player_name.split(' ').pop()}</th><th>${pB.player_name.split(' ').pop()}</th><th>Dif.</th></tr></thead><tbody>`;
+  html += `<table class="cmp-table" style="margin-top:10px;"><thead><tr><th>Métrica</th><th style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${pA.player_id})">${pA.player_name.split(' ').pop()}</th><th style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${pB.player_id})">${pB.player_name.split(' ').pop()}</th><th>Dif.</th></tr></thead><tbody>`;
   rows.forEach(([label, va, vb, mult, invert])=>{
     va = va||0; vb = vb||0;
     const diff = va-vb;
@@ -1196,6 +1212,173 @@ let LAST_ROSTER_RAW = {A: [], B: []};
 let LAST_STARTERS = {A: {}, B: {}};
 let LAST_VALUE_CHECK = null;
 let BET_GAMES = [];
+
+let PROFILE_RETURN_TAB = null;
+
+function switchToTab(tabId){
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+  const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+  if(btn) btn.classList.add('active');
+  document.getElementById('tab-'+tabId).classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function closeProfile(){
+  switchToTab(PROFILE_RETURN_TAB || 'stats2526');
+}
+
+async function openTeamProfile(teamCode){
+  const activeTab = document.querySelector('section.active');
+  if(activeTab && !activeTab.id.includes('profile')) PROFILE_RETURN_TAB = activeTab.id.replace('tab-','');
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+  document.getElementById('tab-teamprofile').classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+
+  const wrap = document.getElementById('teamProfileWrap');
+  wrap.innerHTML = '<div class="loading">A carregar perfil da equipa…</div>';
+
+  const [ratingsRes, formRes, splitRes, coachRes, rosterRes, standingsRes] = await Promise.all([
+    sb.rpc('get_team_blended_ratings'),
+    sb.rpc('get_recent_form_weighted', {p_team: teamCode, p_n: 10}),
+    sb.rpc('get_home_away_split', {p_team: teamCode}),
+    sb.from('coaches').select('coach_name, since_date').eq('team_code', teamCode).single(),
+    sb.from('player_blended_stats').select('*').eq('team_code', teamCode).order('minutes', {ascending:false}),
+    sb.from('standings').select('*').eq('team_code', teamCode).single(),
+  ]);
+  const rating = (ratingsRes.data||[]).find(r=>r.team_code===teamCode);
+  const form = formRes.data?.[0];
+  const split = splitRes.data?.[0];
+  const coach = coachRes.data;
+  const roster = rosterRes.data || [];
+  const standing = standingsRes.data;
+  const nextGames = ALL_GAMES.filter(g=> (g.home_team===teamCode || g.away_team===teamCode) && g.game_date >= new Date().toISOString().slice(0,10)).slice(0,5);
+
+  let html = `<div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+    ${teamPill(teamCode)}<h2 style="margin:0;">${getTeamName(teamCode)}</h2>
+  </div>
+  <div class="sub">${coach ? 'Treinador: '+coach.coach_name+(coach.since_date?' (desde '+coach.since_date+')':'') : ''}${standing ? ' · '+standing.conference+'/'+standing.division+' · '+standing.wins+'V-'+standing.losses+'D' : ''}</div>`;
+
+  if(rating){
+    html += `<div class="prob-board" style="margin-top:16px;">
+      <div class="prob-card leader"><div class="team">RATING COMPOSTO</div><div class="pct">${rating.rating}</div></div>
+      <div class="prob-card"><div class="team">JOGADORES</div><div class="pct" style="font-size:32px;">${rating.n_players}</div></div>
+    </div>
+    <div class="context-grid" style="margin-top:14px;">
+      <div class="context-card">
+        <div class="cc-team">Médias (ponderadas por minutos)</div>
+        <div class="cc-row"><span class="cc-label">PTS</span><span class="cc-val">${rating.avg_pts}</span></div>
+        <div class="cc-row"><span class="cc-label">REB</span><span class="cc-val">${rating.avg_reb}</span></div>
+        <div class="cc-row"><span class="cc-label">AST</span><span class="cc-val">${rating.avg_ast}</span></div>
+        <div class="cc-row"><span class="cc-label">Roubos / Desarmes</span><span class="cc-val">${rating.avg_stl} / ${rating.avg_blk}</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">TS%</span><span class="cc-val">${(rating.avg_ts_pct*100).toFixed(1)}%</span></div>
+      </div>
+      <div class="context-card">
+        <div class="cc-team">Forma & Defesa</div>
+        <div class="cc-row"><span class="cc-label">Últimos ${form ? form.wins+form.losses : '—'}</span><span class="cc-val">${form ? form.wins+'V-'+form.losses+'D' : '—'}</span></div>
+        <div class="cc-row"><span class="cc-label">Sequência</span><span class="cc-val">${form ? streakBadge(form.results) : '—'}</span></div>
+        <div class="cc-row"><span class="cc-label">Casa / Fora</span><span class="cc-val">${split ? split.home_wins+'V-'+(split.home_games-split.home_wins)+'D / '+split.away_wins+'V-'+(split.away_games-split.away_wins)+'D' : '—'}</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Sofridos/jogo</span><span class="cc-val">${split ? split.overall_avg_allowed : '—'}</span></div>
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="empty" style="margin-top:16px;">Sem dados de rating suficientes para esta equipa.</div>`;
+  }
+
+  if(nextGames.length){
+    html += `<div class="sw-title" style="margin-top:18px;">Próximos jogos</div><table style="margin-top:6px;"><tbody>`;
+    nextGames.forEach(g=>{
+      html += `<tr><td class="num">${fmtGameDateTime(g).dateLabel}</td><td>${teamPill(g.away_team)}</td><td class="ts">@</td><td>${teamPill(g.home_team)}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  html += `<div class="sw-title" style="margin-top:18px;">Plantel completo (${roster.length})</div>
+    <div class="roster-list" style="max-height:420px;">
+      ${roster.map(p=>`
+        <div class="roster-row ${p.is_available===false?'unavailable':''}">
+          <div style="cursor:pointer;" onclick="openPlayerProfile(${p.player_id})">
+            <span class="rn" style="text-decoration:underline dotted;">${p.player_name}</span>
+            <span class="rm">${p.position||''} · ${fmt1(p.minutes)} min · ${p.pts.toFixed(1)} PTS</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+
+  wrap.innerHTML = html;
+}
+
+async function openPlayerProfile(playerId){
+  const activeTab = document.querySelector('section.active');
+  if(activeTab && !activeTab.id.includes('profile')) PROFILE_RETURN_TAB = activeTab.id.replace('tab-','');
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x=>x.classList.remove('active'));
+  document.getElementById('tab-playerprofile').classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+
+  const wrap = document.getElementById('playerProfileWrap');
+  wrap.innerHTML = '<div class="loading">A carregar perfil do jogador…</div>';
+
+  const [{data: blended}, {data: s26}, {data: s27}, {data: txs}] = await Promise.all([
+    sb.from('player_blended_stats').select('*').eq('player_id', playerId).single(),
+    sb.from('player_stats').select('*').eq('player_id', playerId).eq('season','2025-26').maybeSingle(),
+    sb.from('player_stats').select('*').eq('player_id', playerId).eq('season','2026-27').maybeSingle(),
+    sb.from('transactions').select('*').eq('player_id', playerId).order('move_date', {ascending:false}),
+  ]);
+
+  if(!blended){ wrap.innerHTML = '<div class="empty">Sem dados para este jogador.</div>'; return; }
+
+  const ts = blended.pts / (2*((blended.fga||0)+0.44*(blended.fta||0))) || 0;
+
+  let html = `<div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+    <h2 style="margin:0;">${blended.player_name}</h2>${teamPill(blended.team_code)}
+  </div>
+  <div class="sub">${blended.position||'?'} · ${blended.is_available===false?'<span style="color:var(--loss);">Indisponível</span>':'Disponível'}${blended.is_transferred?' · <span style="color:var(--teal);">Transferido (ex-'+blended.original_team_2526+')</span>':''}</div>`;
+
+  html += `<div class="prob-board" style="margin-top:16px;">
+    <div class="prob-card leader"><div class="team">MINUTOS/JOGO (ATUAL)</div><div class="pct">${fmt1(blended.minutes)}</div></div>
+    <div class="prob-card"><div class="team">FONTE DOS DADOS</div><div class="pct" style="font-size:22px;">${blended.source_season==='blend' ? Math.round((blended.blend_weight_2627||0)*100)+'% 26-27' : (blended.source_season==='2026-27'?'100% 26-27':'100% 25-26')}</div></div>
+  </div>`;
+
+  html += `<div class="context-grid" style="margin-top:14px;">
+    <div class="context-card">
+      <div class="cc-team">Atual (mistura usada no rating)</div>
+      <div class="cc-row"><span class="cc-label">PTS / REB / AST</span><span class="cc-val">${blended.pts.toFixed(1)} / ${blended.trb.toFixed(1)} / ${blended.ast.toFixed(1)}</span></div>
+      <div class="cc-row"><span class="cc-label">Roubos / Desarmes / Perdas</span><span class="cc-val">${blended.stl.toFixed(1)} / ${blended.blk.toFixed(1)} / ${blended.tov.toFixed(1)}</span></div>
+      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">FG% / 3P% / TS%</span><span class="cc-val">${(blended.fg_pct*100).toFixed(1)}% / ${(blended.p3_pct*100).toFixed(1)}% / ${(ts*100).toFixed(1)}%</span></div>
+    </div>`;
+
+  if(s26){
+    html += `<div class="context-card">
+      <div class="cc-team">Época 2025-26 (${s26.team_code}, ${s26.games} jogos)</div>
+      <div class="cc-row"><span class="cc-label">PTS / REB / AST</span><span class="cc-val">${(s26.pts||0).toFixed(1)} / ${(s26.trb||0).toFixed(1)} / ${(s26.ast||0).toFixed(1)}</span></div>
+      <div class="cc-row"><span class="cc-label">Roubos / Desarmes / Perdas</span><span class="cc-val">${(s26.stl||0).toFixed(1)} / ${(s26.blk||0).toFixed(1)} / ${(s26.tov||0).toFixed(1)}</span></div>
+      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Minutos/jogo</span><span class="cc-val">${(s26.minutes||0).toFixed(1)}</span></div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  if(s27 && s27.games > 0){
+    html += `<div class="context-card" style="margin-top:14px;">
+      <div class="cc-team">Época 2026-27 (${s27.team_code}, ${s27.games} jogos já disputados)</div>
+      <div class="cc-row"><span class="cc-label">PTS / REB / AST</span><span class="cc-val">${(s27.pts||0).toFixed(1)} / ${(s27.trb||0).toFixed(1)} / ${(s27.ast||0).toFixed(1)}</span></div>
+      <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Minutos/jogo</span><span class="cc-val">${(s27.minutes||0).toFixed(1)}</span></div>
+    </div>`;
+  } else {
+    html += `<div class="sub" style="margin-top:10px;">Ainda sem jogos disputados em 2026-27.</div>`;
+  }
+
+  if(txs && txs.length){
+    html += `<div class="sw-title" style="margin-top:18px;">Histórico de transferências</div><table style="margin-top:6px;"><tbody>`;
+    txs.forEach(t=>{
+      html += `<tr><td class="num">${t.move_date||'?'}</td><td>${teamPill(t.from_team)}</td><td class="ts">→</td><td>${teamPill(t.to_team)}</td><td>${t.move_type||''}</td></tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
+  wrap.innerHTML = html;
+}
 
 function openComparisonFromGame(awayTeam, homeTeam){
   document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
@@ -1961,7 +2144,7 @@ function renderRosterList(side, teamCode, roster){
   }
   wrap.innerHTML = roster.players.map(p=>`
     <div class="roster-row ${p.is_available? '' : 'unavailable'}">
-      <div><span class="rn">${p.name}</span> <span class="rm">${p.position||''} · ${fmt1(p.minutes)} min ${p.is_transferred?' · <span style=\"color:var(--teal);\">transferido</span>':''} · <span style="opacity:0.7;">${p.source_season==='blend' ? p.blendPct+'% 26-27' : (p.source_season==='2026-27'?'26-27':'25-26')}</span></span></div>
+      <div><span class="rn" style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${p.id})">${p.name}</span> <span class="rm">${p.position||''} · ${fmt1(p.minutes)} min ${p.is_transferred?' · <span style=\"color:var(--teal);\">transferido</span>':''} · <span style="opacity:0.7;">${p.source_season==='blend' ? p.blendPct+'% 26-27' : (p.source_season==='2026-27'?'26-27':'25-26')}</span></span></div>
       <label class="avail-toggle">
         <input type="checkbox" ${p.is_available?'checked':''} onchange="toggleAvailability(${p.id}, this.checked)">
         Disponível
@@ -1992,7 +2175,7 @@ async function renderCourtsForBothTeams(){
       sb.from('coaches').select('coach_name').eq('team_code', code).single()
     ]);
     const starters = pickStarters(roster.players);
-    document.getElementById('courtLabel'+side).innerHTML = `${teamPill(code)} ${getTeamName(code)}${coachRow ? ' <span style="opacity:0.6; font-size:11px; font-family:Roboto Mono,monospace;">· treinador: '+coachRow.coach_name+'</span>' : ''}`;
+    document.getElementById('courtLabel'+side).innerHTML = `<span style="cursor:pointer;" onclick="openTeamProfile('${code}')">${teamPill(code)} ${getTeamName(code)}</span>${coachRow ? ' <span style="opacity:0.6; font-size:11px; font-family:Roboto Mono,monospace;">· treinador: '+coachRow.coach_name+'</span>' : ''}`;
     document.getElementById('court'+side).innerHTML = `<div class="court-svg-wrap">${courtSVG(starters, code, coachRow?.coach_name)}</div>`;
     renderRosterList(side, code, roster);
     LAST_ROSTER_RAW[side] = roster.raw;
@@ -2108,7 +2291,7 @@ function renderStandings(rows){
       const seed = i+1;
       const playInZone = seed>=7 && seed<=10;
       const rowStyle = playInZone ? ' style="background:rgba(240,187,62,0.06);"' : '';
-      html += `<tr${rowStyle}><td class="num">${seed}</td><td class="name-cell">${teamPill(r.team_code)} ${r.name}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.win_pct!=null ? (r.win_pct*100).toFixed(1)+'%' : '—'}</td></tr>`;
+      html += `<tr class="game-row" onclick="openTeamProfile('${r.team_code}')"${rowStyle}><td class="num">${seed}</td><td class="name-cell">${teamPill(r.team_code)} ${r.name}</td><td class="num">${r.wins}</td><td class="num">${r.losses}</td><td class="num">${r.win_pct!=null ? (r.win_pct*100).toFixed(1)+'%' : '—'}</td></tr>`;
       if(seed===6){
         html += `<tr><td colspan="5" style="padding:2px 10px; border-bottom:2px solid var(--teal); font-size:10px; color:var(--teal); font-family:'Roboto Mono',monospace;">— lugar direto nos playoffs (1-6) —</td></tr>`;
       }
