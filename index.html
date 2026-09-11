@@ -822,7 +822,7 @@ function renderSeasonTable(key){
   const teamF = document.getElementById('s'+key+'TeamFilter').value;
 
   let rows = rowsSrc.map(s=>({
-    name: s.players?.name || '(?)', pos: s.players?.position || '', team: s.team_code,
+    id: s.player_id, name: s.players?.name || '(?)', pos: s.players?.position || '', team: s.team_code,
     g: s.games, mp: s.minutes, fg_pct: s.fg_pct, p3_pct: s.p3_pct,
     trb: s.trb, ast: s.ast, stl: s.stl, blk: s.blk, pts: s.pts
   }));
@@ -846,7 +846,7 @@ function renderSeasonTable(key){
   });
   html += '</tr></thead><tbody>';
   rows.forEach(r=>{
-    html += '<tr>';
+    html += `<tr class="game-row" onclick="openPlayerProfile(${r.id})">`;
     html += `<td class="name-cell">${r.name}</td>`;
     html += `<td>${r.pos}</td>`;
     html += `<td>${teamPill(r.team)}</td>`;
