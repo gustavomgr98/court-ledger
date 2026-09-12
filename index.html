@@ -1902,12 +1902,18 @@ async function getRegisteredByName(){
   return REGISTERED_BY_NAMES[user?.email] || user?.email || 'Desconhecido';
 }
 
-async function loadBetsList(){
-  const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:false}).limit(30);
-  const wrap = document.getElementById('betsListWrap');
-  if(!data || !data.length){ wrap.innerHTML = ''; return; }
+function renderBetsTable(data){
+  if(!data.length) return '<div class="empty">Sem apostas ainda.</div>';
   const resultLabel = {pending:'Pendente', won:'Ganhou', lost:'Perdeu', void:'Anulada'};
-  wrap.innerHTML = '<table><thead><tr><th>Data</th><th>Quem</th><th>Jogo</th><th>Mercado</th><th>Escolha</th><th>Odd</th><th>Stake</th><th>Resultado</th><th></th></tr></thead><tbody>' +
+  const resolved = data.filter(b=>b.result==='won'||b.result==='lost');
+  const wins = data.filter(b=>b.result==='won').length;
+  const profit = data.reduce((s,b)=> s + (Number(b.profit_loss)||0), 0);
+  const staked = data.filter(b=>b.result!=='pending').reduce((s,b)=> s + (Number(b.stake)||0), 0);
+  const roi = staked ? (profit/staked*100) : null;
+  const statsLine = resolved.length
+    ? `<div class="sub" style="margin-bottom:8px;">${wins}V-${resolved.length-wins}D · Lucro: <span style="${profit>=0?'color:var(--teal);':'color:var(--loss);'}">€${profit.toFixed(2)}</span>${roi!=null?' · ROI: '+roi.toFixed(1)+'%':''}</div>`
+    : '';
+  return statsLine + '<table><thead><tr><th>Data</th><th>Jogo</th><th>Mercado</th><th>Escolha</th><th>Odd</th><th>Stake</th><th>Resultado</th><th></th></tr></thead><tbody>' +
     data.map(b=>{
       const pickLabel = b.market_type==='Outro' ? b.pick
         : b.market_type==='Vencedor' ? b.team
@@ -1915,7 +1921,7 @@ async function loadBetsList(){
         : `${b.team?b.team+' ':''}${b.side==='over'?'Over':'Under'} ${b.line}`;
       const badge = b.auto_resolved ? ' <span style="opacity:0.6; font-size:10px;">(auto)</span>' : '';
       return `<tr>
-        <td class="num">${b.placed_at}</td><td>${b.registered_by||'—'}</td><td>${b.matchup||'—'}</td><td>${b.market_type}</td><td>${pickLabel}</td>
+        <td class="num">${b.placed_at}</td><td>${b.matchup||'—'}</td><td>${b.market_type}</td><td>${pickLabel}</td>
         <td class="num">${b.odds||'—'}</td><td class="num">€${b.stake}</td>
         <td>${resultLabel[b.result]||b.result}${badge}
           ${b.result==='pending' && !b.game_id ? `<select onchange="updateBetResult(${b.id}, this.value, ${b.stake}, ${b.odds||'null'})" style="width:auto; padding:2px 6px; font-size:10.5px; margin-left:4px;">
@@ -1925,6 +1931,26 @@ async function loadBetsList(){
         <td><button class="ghost" onclick="deleteBet(${b.id})">×</button></td>
       </tr>`;
     }).join('') + '</tbody></table>';
+}
+
+async function loadBetsList(){
+  const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:false}).limit(60);
+  const wrap = document.getElementById('betsListWrap');
+  if(!data || !data.length){ wrap.innerHTML = ''; return; }
+
+  const byPerson = {};
+  data.forEach(b=>{
+    const key = b.registered_by || 'Sem registo';
+    (byPerson[key] = byPerson[key] || []).push(b);
+  });
+  const names = Object.keys(byPerson).sort((x,y)=> byPerson[y].length - byPerson[x].length);
+
+  wrap.innerHTML = names.map(name => `
+    <div class="sw-title" style="margin-top:18px; display:flex; align-items:center; gap:8px;">
+      Apostas — ${name} <span class="ts">(${byPerson[name].length})</span>
+    </div>
+    ${renderBetsTable(byPerson[name])}
+  `).join('');
 }
 
 async function submitBet(){
