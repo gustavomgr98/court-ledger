@@ -409,37 +409,20 @@
     <!-- TRANSAÇÕES -->
     <section id="tab-transacoes">
       <div class="panel">
-        <h2>Registar transferência</h2>
-        <div class="sub">Também não há API gratuita e fiável para transferências (já verificámos) — mas aqui tens duas formas de as registar:</div>
+        <h2>Transferências</h2>
+        <div class="sub">Sem API gratuita e fiável para isto — mas resolve-se com um único pedido no chat.</div>
         <div class="matchup-banner">
-          <b>Opção A — pedir ao Claude (mais rápido):</b> no chat, escreve "atualiza as transferências" ou cola uma notícia/tabela — o Claude escreve diretamente na base de dados.<br><br>
-          <b>Opção B — preencher aqui tu mesmo:</b> usa o formulário abaixo para um registo pontual.
+          <b>Como atualizar:</b> no chat, escreve "atualiza os dados" (ou "atualiza tudo") — cobre transferências,
+          treinadores, lesões, limpeza de jogadores e stats de uma vez só, diretamente na base de dados.
+          Não precisas de preencher nada aqui.
         </div>
         <div class="matchup-banner">
-          <b>Cadência recomendada de atualização:</b><br>
-          • Agora até início da época (out.) — <b>semanal</b> (cortes de plantel, contratos Exhibit 10, two-way).<br>
-          • Início da época até ao trade deadline (fev.) — <b>quinzenal</b> chega (época mais parada em trocas).<br>
-          • Semana do trade deadline (início de fevereiro) — reforçar para <b>semanal / a cada 2-3 dias</b> (é quando acontece a maioria das trocas grandes).<br>
-          • Pós-deadline até final da época (fev.-abr.) — <b>quinzenal a mensal</b> (só buyouts pontuais).<br>
-          Se preferires uma cadência única simples: <b>quinzenal ao longo de toda a época</b>, com reforço manual na semana do deadline.
+          <b>Cadência recomendada:</b><br>
+          • Agora até início da época (out.) — <b>semanal</b>.<br>
+          • Início da época até ao trade deadline (fev.) — <b>quinzenal</b> chega.<br>
+          • Semana do trade deadline (início de fevereiro) — reforçar para <b>a cada 2-3 dias</b>.<br>
+          • Pós-deadline até final da época — <b>quinzenal a mensal</b>.
         </div>
-        <div id="txMsg" class="msg"></div>
-        <div class="grid2">
-          <div class="field"><label>Jogador</label><input id="txPlayer" placeholder="Nome completo" list="playerList"></div>
-          <div class="field"><label>Tipo de movimento</label>
-            <select id="txType">
-              <option>Trade</option><option>Signing</option><option>Draft</option>
-              <option>Waived</option><option>Free Agent</option><option>Extension</option>
-            </select>
-          </div>
-          <div class="field"><label>Equipa de origem</label><select id="txFrom"><option value="">—</option></select></div>
-          <div class="field"><label>Equipa de destino</label><select id="txTo"><option value="">—</option></select></div>
-          <div class="field"><label>Data</label><input id="txDate" type="date"></div>
-          <div class="field"><label>Contrato / duração</label><input id="txContract" placeholder="ex: 3 anos, $90M"></div>
-        </div>
-        <div class="field"><label>Fonte</label><input id="txSource" placeholder="ex: NBA.com/transactions"></div>
-        <div class="field"><label>Notas</label><textarea id="txNotes" rows="2"></textarea></div>
-        <button class="primary" onclick="submitTransaction()">Guardar transferência</button>
       </div>
 
       <div class="panel">
@@ -782,7 +765,6 @@ async function loadTeams(){
   const realTeams = data.filter(t => !['2TM','3TM','4TM'].includes(t.code));
   const opts = realTeams.map(t=>`<option value="${t.code}">${t.code} — ${t.name}</option>`).join('');
   ['s2526TeamFilter','s2627TeamFilter','calTeamFilter'].forEach(id=>{ document.getElementById(id).innerHTML += opts; });
-  ['txFrom','txTo'].forEach(id=>{ document.getElementById(id).innerHTML = '<option value="">—</option>' + opts; });
   ['cmpA','cmpB'].forEach(id=>{ document.getElementById(id).innerHTML = opts; });
   document.getElementById('cmpB').selectedIndex = 1;
 }
@@ -891,28 +873,6 @@ async function loadTransactions(){
   `).join('');
 }
 
-async function submitTransaction(){
-  const msg = document.getElementById('txMsg');
-  const name = document.getElementById('txPlayer').value.trim();
-  if(!name){ showMsg(msg,'err','Indica o nome do jogador.'); return; }
-  const match = ALL_PLAYERS.find(p => p.name.toLowerCase() === name.toLowerCase());
-  const payload = {
-    player_id: match?.id || null,
-    player_name_snapshot: name,
-    from_team: document.getElementById('txFrom').value || null,
-    to_team: document.getElementById('txTo').value || null,
-    move_type: document.getElementById('txType').value,
-    move_date: document.getElementById('txDate').value || null,
-    contract: document.getElementById('txContract').value || null,
-    source: document.getElementById('txSource').value || null,
-    notes: document.getElementById('txNotes').value || null
-  };
-  const {error} = await sb.from('transactions').insert(payload);
-  if(error){ showMsg(msg,'err','Erro: '+error.message); return; }
-  showMsg(msg,'ok','Transferência guardada.');
-  ['txPlayer','txContract','txSource','txNotes'].forEach(id=>document.getElementById(id).value='');
-  await loadTransactions();
-}
 async function deleteTx(id){
   if(!confirm('Remover esta transferência?')) return;
   await sb.from('transactions').delete().eq('id', id);
