@@ -462,7 +462,10 @@
         <div class="tag">BY GUSTAVO RODRIGUES</div>
       </div>
     </div>
-    <button class="ghost" onclick="doSignOut()">Sair</button>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button class="ghost" onclick="switchToTab('definicoes')" aria-label="Definições" title="Definições" style="padding:8px 11px; font-size:16px;">⚙️</button>
+      <button class="ghost" onclick="doSignOut()">Sair</button>
+    </div>
   </header>
 
   <div id="seasonCountdown"></div>
@@ -479,7 +482,6 @@
       <button class="tab-btn" data-tab="comparacao">Comparação de Equipas</button>
       <button class="tab-btn" data-tab="registo">Registo</button>
       <button class="tab-btn" data-tab="glossario">Glossário</button>
-      <button class="tab-btn" data-tab="definicoes">Definições</button>
     </nav>
 
     <!-- STATS 25-26 -->
