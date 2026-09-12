@@ -234,13 +234,13 @@
   #liveTicker.show{display:block;}
   #liveTicker .live-badge{
     position:absolute; left:0; top:0; bottom:0; z-index:2; display:flex; align-items:center; gap:5px;
-    padding:0 10px; background:linear-gradient(90deg, #05090F 70%, transparent); font-family:'Oswald',sans-serif;
-    font-size:10.5px; font-weight:700; letter-spacing:0.5px; color:var(--loss);
+    padding:0 10px; width:78px; background:#05090F; border-right:1px solid var(--line); font-family:'Oswald',sans-serif;
+    font-size:10.5px; font-weight:700; letter-spacing:0.5px; color:var(--loss); box-shadow:8px 0 10px -4px #05090F;
   }
   #liveTicker .live-dot{width:6px; height:6px; border-radius:50%; background:var(--loss); animation:pulse 1.1s ease-in-out infinite;}
   #liveTicker .ticker-track{
     display:flex; align-items:center; height:100%; white-space:nowrap;
-    animation:ticker-scroll linear infinite; padding-left:70px;
+    animation:ticker-scroll linear infinite; padding-left:90px;
   }
   #liveTicker .live-item{display:inline-flex; align-items:center; gap:7px; padding:0 22px; font-family:'Roboto Mono',monospace; font-size:12px; border-right:1px solid var(--line);}
   #liveTicker .live-item b{color:var(--ink); font-weight:600;}
