@@ -1769,7 +1769,8 @@ async function loadCalibration(){
   const totalCorrect = data.reduce((s,r)=>s+r.n_correct,0);
   const acc = totalN ? (totalCorrect/totalN*100) : null;
   const rel = reliabilityLabel(acc||0, totalN);
-  let html = `<div class="prob-board" style="margin-bottom:10px;">
+  let html = `<div class="sw-title">Vencedor (probabilidade de vitória)</div>
+  <div class="prob-board" style="margin-bottom:10px;">
     <div class="prob-card leader">
       <div class="team">ACERTO GERAL DO MODELO</div>
       <div class="pct">${acc!=null && totalN>=10 ? acc.toFixed(1)+'%' : '—'}</div>
@@ -1787,6 +1788,26 @@ async function loadCalibration(){
     html += `<tr><td>${r.confidence_bucket}</td><td class="num">${r.n_predictions}</td><td class="num">${diff!=null ? diff.toFixed(1)+'%' : '—'}</td></tr>`;
   });
   html += '</tbody></table>';
+
+  const {data: proj} = await sb.from('projection_accuracy').select('*').single();
+  html += `<div class="sw-title" style="margin-top:22px;">Total de Pontos & Handicap (projeções)</div>`;
+  if(proj && proj.n >= 10){
+    html += `<div class="context-grid">
+      <div class="context-card">
+        <div class="cc-team">Total de pontos (${proj.n} jogos)</div>
+        <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_total} pts</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_total>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_total)} pts</span></div>
+      </div>
+      <div class="context-card">
+        <div class="cc-team">Handicap / Margem (${proj.n} jogos)</div>
+        <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_margin} pts</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_margin>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_margin)} pts</span></div>
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="empty">Ainda sem amostra suficiente (${proj?.n||0}/10) para validar estas projeções.</div>`;
+  }
+
   wrap.innerHTML = html;
 }
 
