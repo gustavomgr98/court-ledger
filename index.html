@@ -1915,9 +1915,8 @@ async function checkStaleData(){
   if(!data){ banner.style.display = 'none'; return; }
   const hoursSince = (Date.now() - new Date(data.updated_at).getTime()) / 3600000;
   if(hoursSince >= 48){
-    const days = Math.floor(hoursSince/24);
     banner.style.display = 'flex';
-    banner.innerHTML = `<span style="font-size:14px;">📋</span> <b>Lembrete:</b> já lá vão ${days}+ dias desde a última atualização de transferências, treinadores, lesões e stats — pede ao Claude "atualiza os dados" quando quiseres.`;
+    banner.innerHTML = `<span style="font-size:14px;">📋</span> <b>Lembrete:</b> já lá vão mais de 48h desde a última atualização de transferências, treinadores, lesões e stats — pede ao Claude "atualiza os dados" quando quiseres.`;
   } else {
     banner.style.display = 'none';
   }
