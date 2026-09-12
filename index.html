@@ -963,6 +963,18 @@ function renderBlendedTable(a, b, ra, rb){
     <b>${a}</b>: ${ra.n_players} jogadores disponíveis no plantel atual — ${ra.n_from_2627} já com jogos 26-27, ${ra.n_players-ra.n_from_2627} a usar 25-26 como base.<br>
     <b>${b}</b>: ${rb.n_players} jogadores disponíveis no plantel atual — ${rb.n_from_2627} já com jogos 26-27, ${rb.n_players-rb.n_from_2627} a usar 25-26 como base.
   </div>`;
+  const REASONS = {
+    'PTS/Jog': 'mais poder ofensivo',
+    'REB/Jog': 'domina o ressalto, mais posses extra',
+    'AST/Jog': 'melhor criação e movimento de bola',
+    'Perdas de bola/Jog': 'mais cuidado com a bola, menos posses desperdiçadas',
+    'Roubos de bola/Jog': 'mais pressão e agressividade defensiva',
+    'Desarmes/Jog': 'protege melhor o aro',
+    'FG%': 'converte melhor os lançamentos em geral',
+    '3P%': 'ameaça maior a longa distância',
+    'TS%': 'eficiência global superior (conta tudo: FG, 3P, lances livres)',
+    'Rating composto': 'vantagem global mais consistente neste confronto',
+  };
   const rows = [
     ['PTS/Jog', ra.avg_pts, rb.avg_pts, 1, false],
     ['REB/Jog', ra.avg_reb, rb.avg_reb, 1, false],
@@ -985,6 +997,10 @@ function renderBlendedTable(a, b, ra, rb){
     const aCell = aWins ? `<b style="color:var(--teal);">${f(va)}${suf} ▲</b>` : `${f(va)}${suf}`;
     const bCell = bWins ? `<b style="color:var(--teal);">${f(vb)}${suf} ▲</b>` : `${f(vb)}${suf}`;
     html += `<tr><td>${label}</td><td class="num">${aCell}</td><td class="num">${bCell}</td></tr>`;
+    if((aWins || bWins) && REASONS[label]){
+      const winner = aWins ? a : b;
+      html += `<tr><td colspan="3" style="padding:2px 10px 10px; border-bottom:1px solid var(--line);"><span class="ts">${winner} está melhor aqui — ${REASONS[label]}.</span></td></tr>`;
+    }
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
