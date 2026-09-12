@@ -935,15 +935,17 @@ function renderPlayerComparison(){
     <b>${pA.player_name}</b>: ${pA.source_season==='blend' ? Math.round((pA.blend_weight_2627||0)*100)+'% 26-27' : (pA.source_season==='2026-27'?'26-27':'25-26')} como base ${pA.is_transferred?' · <span style="color:var(--teal);">transferido</span>':''}.<br>
     <b>${pB.player_name}</b>: ${pB.source_season==='blend' ? Math.round((pB.blend_weight_2627||0)*100)+'% 26-27' : (pB.source_season==='2026-27'?'26-27':'25-26')} como base ${pB.is_transferred?' · <span style="color:var(--teal);">transferido</span>':''}.
   </div>`;
-  html += `<table class="cmp-table" style="margin-top:10px;"><thead><tr><th>Métrica</th><th style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${pA.player_id})">${pA.player_name.split(' ').pop()}</th><th style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${pB.player_id})">${pB.player_name.split(' ').pop()}</th><th>Dif.</th></tr></thead><tbody>`;
+  html += `<table class="cmp-table" style="margin-top:10px;"><thead><tr><th>Métrica</th><th style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${pA.player_id})">${pA.player_name.split(' ').pop()}</th><th style="cursor:pointer; text-decoration:underline dotted;" onclick="openPlayerProfile(${pB.player_id})">${pB.player_name.split(' ').pop()}</th></tr></thead><tbody>`;
   rows.forEach(([label, va, vb, mult, invert])=>{
     va = va||0; vb = vb||0;
     const diff = va-vb;
     const colorDiff = invert ? -diff : diff;
-    const cls = colorDiff>0 ? 'diff-pos' : colorDiff<0 ? 'diff-neg' : '';
+    const aWins = colorDiff>0, bWins = colorDiff<0;
     const suf = mult===100 ? '%':'';
     const f = (x)=> mult===100 ? (x*100).toFixed(1) : x.toFixed(1);
-    html += `<tr><td>${label}</td><td class="num">${f(va)}${suf}</td><td class="num">${f(vb)}${suf}</td><td class="num ${cls}">${diff>0?'+':''}${f(diff)}${suf}</td></tr>`;
+    const aCell = aWins ? `<b style="color:var(--teal);">${f(va)}${suf} ▲</b>` : `${f(va)}${suf}`;
+    const bCell = bWins ? `<b style="color:var(--teal);">${f(vb)}${suf} ▲</b>` : `${f(vb)}${suf}`;
+    html += `<tr><td>${label}</td><td class="num">${aCell}</td><td class="num">${bCell}</td></tr>`;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
