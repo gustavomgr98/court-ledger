@@ -240,7 +240,7 @@
   #liveTicker .live-dot{width:6px; height:6px; border-radius:50%; background:var(--loss); animation:pulse 1.1s ease-in-out infinite;}
   #liveTicker .ticker-track{
     display:flex; align-items:center; height:100%; white-space:nowrap;
-    animation:ticker-scroll 6s linear infinite; padding-left:70px;
+    animation:ticker-scroll linear infinite; padding-left:70px;
   }
   #liveTicker .live-item{display:inline-flex; align-items:center; gap:7px; padding:0 22px; font-family:'Roboto Mono',monospace; font-size:12px; border-right:1px solid var(--line);}
   #liveTicker .live-item b{color:var(--ink); font-weight:600;}
@@ -2359,6 +2359,9 @@ async function refreshLiveTicker(){
       ${g.game_time ? `<span class="lq">${g.game_time}</span>` : ''}
     </span>`).join('');
   track.innerHTML = items + items; // duplicado para o scroll continuo (loop de 50%) ficar sem cortes
+  // duracao proporcional ao numero de jogos, para o ritmo por jogo se manter sempre igual
+  // (mais jogos ao vivo = volta total mais longa, mas cada jogo passa sempre a mesma velocidade)
+  track.style.animationDuration = `${Math.max(3, data.length * 2.5)}s`;
   ticker.classList.add('show');
   if(fab) fab.style.bottom = '54px';
 }
