@@ -102,7 +102,7 @@
   #s2526TableWrap, #s2627TableWrap, #calendarWrap, #standingsWrap, #h2hWrap, #cmpTableBlendedWrap, #playerComparisonWrap{
     overflow-x:auto; -webkit-overflow-scrolling:touch;
   }
-  #s2526TableWrap table, #s2627TableWrap table, #calendarWrap table, #h2hWrap table{
+  #s2526TableWrap table, #s2627TableWrap table, #calendarWrap table, #h2hWrap table, #betsListWrap table{
     min-width:640px;
   }
   th{
@@ -618,7 +618,7 @@
         </div>
         <button class="primary" onclick="submitBet()">Registar aposta</button>
         <button class="ghost" style="margin-top:8px;" onclick="exportBetsCSV()">⬇️ Exportar para CSV</button>
-        <div id="betsListWrap" style="margin-top:20px;"></div>
+        <div id="betsListWrap" style="margin-top:20px; overflow-x:auto; -webkit-overflow-scrolling:touch;"></div>
       </div>
     </section>
 
