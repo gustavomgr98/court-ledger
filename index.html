@@ -229,7 +229,7 @@
   #liveTicker{
     display:none; position:fixed; left:0; right:0; bottom:12px; height:34px; z-index:998;
     background:#05090F; border-top:1px solid var(--line); border-bottom:1px solid var(--line); overflow:hidden;
-    box-shadow:0 -4px 16px rgba(0,0,0,0.4);
+    box-shadow:0 -4px 16px rgba(0,0,0,0.4); touch-action:none; overscroll-behavior:none;
   }
   #liveTicker.show{display:block;}
   #liveTicker .live-badge{
@@ -240,7 +240,7 @@
   #liveTicker .live-dot{width:6px; height:6px; border-radius:50%; background:var(--loss); animation:pulse 1.1s ease-in-out infinite;}
   #liveTicker .ticker-track{
     display:flex; align-items:center; height:100%; white-space:nowrap;
-    animation:ticker-scroll 12s linear infinite; padding-left:70px; touch-action:none; cursor:grab;
+    animation:ticker-scroll 8s linear infinite; padding-left:70px; touch-action:none; overscroll-behavior:none; cursor:grab;
   }
   #liveTicker .ticker-track:hover{animation-play-state:paused;}
   #liveTicker .ticker-track.dragging{cursor:grabbing;}
@@ -2369,12 +2369,10 @@ function setupTickerDrag(){
     track.style.transform = '';
     track.style.animationPlayState = 'running';
   };
-  track.addEventListener('touchstart', (e)=>{ e.preventDefault(); start(e.touches[0].clientX); }, {passive:false});
-  track.addEventListener('touchmove', (e)=>{ e.preventDefault(); move(e.touches[0].clientX); }, {passive:false});
-  track.addEventListener('touchend', end);
-  track.addEventListener('mousedown', (e)=> start(e.clientX));
-  window.addEventListener('mousemove', (e)=> move(e.clientX));
-  window.addEventListener('mouseup', end);
+  track.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); start(e.touches[0].clientX); }, {passive:false});
+  track.addEventListener('touchmove', (e)=>{ e.preventDefault(); e.stopPropagation(); move(e.touches[0].clientX); }, {passive:false});
+  track.addEventListener('touchend', (e)=>{ e.preventDefault(); e.stopPropagation(); end(); }, {passive:false});
+  track.addEventListener('touchcancel', (e)=>{ end(); }, {passive:false});
 }
 
 async function refreshLiveTicker(){
