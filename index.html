@@ -767,7 +767,7 @@ async function enterApp(){
     await checkStaleData();
     await refreshLiveTicker();
     setupTickerDrag();
-    setInterval(refreshLiveTicker, 25000);
+    setInterval(refreshLiveTicker, 24000);
     await loadBankroll();
     await loadBetsList();
     await populateBetGameSelect();
@@ -2341,7 +2341,7 @@ function setupTickerDrag(){
   // fica so o scroll automatico continuo, que ja funciona bem.
 }
 
-let TICKER_ANIM = { offset: 0, rafId: null, lastTime: null, speed: 45 };
+let TICKER_ANIM = { offset: 0, rafId: null, lastTime: null, speed: 80 };
 
 function startTickerLoop(){
   const track = document.getElementById('liveTickerTrack');
