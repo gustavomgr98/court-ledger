@@ -37,6 +37,24 @@
     --court-2:var(--bg-2);
     --court-line:var(--line);
   }
+  :root[data-theme="light"]{
+    --bg:#F2F4F8;
+    --bg-2:#E6EAF1;
+    --panel:#FFFFFF;
+    --panel-raised:#F5F7FB;
+    --line:#D6DCE6;
+    --line-soft:rgba(10,20,32,0.05);
+    --teal:#0C8F82;
+    --gold:#9A6B00;
+    --loss:#D6394A;
+    --ink:#141B26;
+    --ink-dim:#5A6B85;
+  }
+  html[data-text-size="large"]{font-size:112%;}
+  html[data-text-size="xlarge"]{font-size:124%;}
+  html[data-reduce-motion="1"] *, html[data-reduce-motion="1"] *::before, html[data-reduce-motion="1"] *::after{
+    animation-duration:0.001ms !important; transition-duration:0.001ms !important; animation-iteration-count:1 !important;
+  }
   *{box-sizing:border-box;}
   ::selection{background:rgba(255,122,61,0.3); color:var(--ink);}
   body{
@@ -461,6 +479,7 @@
       <button class="tab-btn" data-tab="comparacao">Comparação de Equipas</button>
       <button class="tab-btn" data-tab="registo">Registo</button>
       <button class="tab-btn" data-tab="glossario">Glossário</button>
+      <button class="tab-btn" data-tab="definicoes">Definições</button>
     </nav>
 
     <!-- STATS 25-26 -->
@@ -725,6 +744,38 @@
       </div>
     </section>
 
+    <!-- DEFINICOES -->
+    <section id="tab-definicoes">
+      <div class="panel">
+        <h2>Definições</h2>
+        <div class="sub">Preferências de visualização, guardadas neste telemóvel.</div>
+
+        <div class="sw-title" style="margin-top:16px;">Aparência</div>
+        <div class="context-card" style="margin-top:8px;">
+          <div class="cc-row"><span class="cc-label">Modo escuro / claro</span>
+            <span class="cc-val"><button class="ghost" id="themeToggleBtn" onclick="toggleTheme()">🌙 Escuro</button></span>
+          </div>
+        </div>
+
+        <div class="sw-title" style="margin-top:18px;">Texto</div>
+        <div class="field"><label>Tamanho do texto</label>
+          <select id="textSizeSelect" onchange="setTextSize(this.value)">
+            <option value="normal">Normal</option>
+            <option value="large">Grande</option>
+            <option value="xlarge">Muito grande</option>
+          </select>
+        </div>
+
+        <div class="sw-title" style="margin-top:18px;">Movimento</div>
+        <div class="context-card" style="margin-top:8px;">
+          <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Reduzir animações</span>
+            <span class="cc-val"><button class="ghost" id="motionToggleBtn" onclick="toggleReduceMotion()">Desligado</button></span>
+          </div>
+        </div>
+        <div class="sub" style="margin-top:8px;">Já respeitamos automaticamente a preferência de "reduzir movimento" do teu telemóvel — isto é só um interruptor extra, caso queiras desligar as animações mesmo sem essa opção ativa no aparelho.</div>
+      </div>
+    </section>
+
     <!-- PERFIL DE EQUIPA -->
     <section id="tab-teamprofile">
       <div class="panel">
@@ -781,6 +832,8 @@ let sortState = { '2526': {col:'pts', dir:-1}, '2627': {col:'pts', dir:-1} };
 const SUPABASE_URL = 'https://vtefsaloivpzkbxthzya.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ0ZWZzYWxvaXZwemtieHRoenlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTY0MDQsImV4cCI6MjEwNDQ3MjQwNH0.cP2V8qNzi5va5GVEtCpkXJt0OI6koci7MpLZpsE4PLs';
 const SEASON_LABEL = { '2526':'2025-26', '2627':'2026-27' };
+
+loadDisplayPrefs(); // aplica tema/tamanho/movimento logo no arranque, mesmo antes do login, para nao haver flash
 
 async function init(){
   try{
@@ -1972,6 +2025,44 @@ const GLOSSARY = [
   {cat:'Regras da NBA', term:'Luxury tax (imposto de luxo)', def:'Imposto que as equipas pagam à liga se a folha salarial ultrapassar um certo limite — penaliza equipas que gastam muito acima da média.'},
   {cat:'Regras da NBA', term:'Prolongamento (overtime)', def:'Período extra de 5 minutos jogado quando o jogo termina empatado no fim do tempo regulamentar — repete-se as vezes que forem precisas até haver vencedor.'},
 ];
+
+function toggleTheme(){
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  applyTheme(isLight ? 'dark' : 'light');
+}
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('cl-theme', theme);
+  const btn = document.getElementById('themeToggleBtn');
+  if(btn) btn.textContent = theme==='light' ? '☀️ Claro' : '🌙 Escuro';
+}
+
+function setTextSize(size){
+  document.documentElement.setAttribute('data-text-size', size);
+  localStorage.setItem('cl-text-size', size);
+}
+
+function toggleReduceMotion(){
+  const on = document.documentElement.getAttribute('data-reduce-motion') === '1';
+  applyReduceMotion(!on);
+}
+function applyReduceMotion(on){
+  document.documentElement.setAttribute('data-reduce-motion', on ? '1' : '0');
+  localStorage.setItem('cl-reduce-motion', on ? '1' : '0');
+  const btn = document.getElementById('motionToggleBtn');
+  if(btn) btn.textContent = on ? 'Ligado' : 'Desligado';
+}
+
+function loadDisplayPrefs(){
+  const theme = localStorage.getItem('cl-theme') || 'dark';
+  applyTheme(theme);
+  const textSize = localStorage.getItem('cl-text-size') || 'normal';
+  document.documentElement.setAttribute('data-text-size', textSize);
+  const sel = document.getElementById('textSizeSelect');
+  if(sel) sel.value = textSize;
+  const reduceMotion = localStorage.getItem('cl-reduce-motion') === '1';
+  applyReduceMotion(reduceMotion);
+}
 
 function renderGlossary(){
   const wrap = document.getElementById('glossaryWrap');
