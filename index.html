@@ -277,6 +277,42 @@
     padding:10px 20px; background:rgba(240,187,62,0.12); border-bottom:1px solid rgba(240,187,62,0.35);
     color:var(--gold); font-size:12.5px; display:flex; align-items:center; gap:8px;
   }
+  /* Contagem decrescente para o inicio da epoca */
+  #seasonCountdown{padding:16px 20px 4px;}
+  .countdown-card{
+    position:relative; overflow:hidden; border-radius:12px; padding:16px 18px 14px;
+    background:linear-gradient(160deg, #12233F, #0A1420 75%);
+    border:1px solid rgba(255,122,61,0.25);
+  }
+  .countdown-card::before{
+    content:''; position:absolute; inset:0; opacity:0.5; pointer-events:none;
+    background:
+      linear-gradient(90deg, transparent 49.4%, rgba(255,255,255,0.05) 49.4% 50.6%, transparent 50.6%),
+      repeating-linear-gradient(90deg, transparent 0 11%, rgba(255,255,255,0.025) 11% 11.5%, transparent 11.5% 22%);
+  }
+  .countdown-title{
+    position:relative; font-family:'Roboto Mono',monospace; font-size:10.5px; letter-spacing:0.6px;
+    color:var(--gold); text-transform:uppercase; margin-bottom:12px; display:flex; align-items:center; gap:6px;
+  }
+  .countdown-boxes{position:relative; display:flex; align-items:center; justify-content:center; gap:0;}
+  .countdown-box{display:flex; flex-direction:column; align-items:center; min-width:52px;}
+  .countdown-num{
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:34px; line-height:1;
+    background:linear-gradient(180deg, var(--paint), var(--gold)); -webkit-background-clip:text; background-clip:text;
+    color:transparent; font-variant-numeric:tabular-nums; letter-spacing:0.5px;
+  }
+  .countdown-unit{
+    font-family:'Roboto Mono',monospace; font-size:9.5px; color:var(--ink-dim); text-transform:uppercase;
+    letter-spacing:0.8px; margin-top:2px;
+  }
+  .countdown-sep{
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:28px; color:var(--line);
+    padding:0 4px 14px; align-self:flex-start; margin-top:2px;
+  }
+  .countdown-sub{position:relative; text-align:center; font-size:11px; color:var(--ink-dim); margin-top:10px; font-family:'Inter',sans-serif;}
+  .countdown-progress{position:relative; height:3px; border-radius:2px; background:var(--line); margin-top:12px; overflow:hidden;}
+  .countdown-progress-fill{height:100%; background:linear-gradient(90deg, var(--paint), var(--gold)); border-radius:2px; transition:width 1s linear;}
+
   #upcomingTicker{
     display:flex; gap:0; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
     border-bottom:1px solid var(--line); background:var(--bg-2);
@@ -377,6 +413,7 @@
     <button class="ghost" onclick="doSignOut()">Sair</button>
   </header>
 
+  <div id="seasonCountdown"></div>
   <div id="staleDataBanner" style="display:none;"></div>
   <div id="upcomingTicker"></div>
 
@@ -768,6 +805,8 @@ async function enterApp(){
     await refreshLiveTicker();
     setupTickerDrag();
     setInterval(refreshLiveTicker, 24000);
+    updateSeasonCountdown();
+    setInterval(updateSeasonCountdown, 1000);
     await loadBankroll();
     await loadBetsList();
     await populateBetGameSelect();
@@ -2384,19 +2423,50 @@ async function refreshLiveTicker(){
   startTickerLoop(); // so arranca a primeira vez; depois disso, o proprio requestAnimationFrame continua sozinho
 }
 
+const SEASON_START = new Date('2026-10-20T19:00:00Z'); // hora real do primeiro jogo (Boston @ Detroit), UTC
+const SEASON_START_REF = new Date('2026-06-01T00:00:00'); // referencia p/ barra de progresso (verao pos-draft)
+
+function updateSeasonCountdown(){
+  const el = document.getElementById('seasonCountdown');
+  if(!el) return;
+  const now = new Date();
+  const diff = SEASON_START - now;
+  if(diff <= 0){ el.innerHTML = ''; return; }
+
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor((diff % 86400000) / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  const pad = (n)=> String(n).padStart(2,'0');
+
+  const totalSpan = SEASON_START - SEASON_START_REF;
+  const elapsed = now - SEASON_START_REF;
+  const pct = Math.max(0, Math.min(100, (elapsed/totalSpan)*100));
+
+  el.innerHTML = `
+    <div class="countdown-card">
+      <div class="countdown-title">🏀 CONTAGEM PARA O TIP-OFF · ÉPOCA 2026-27</div>
+      <div class="countdown-boxes">
+        <div class="countdown-box"><div class="countdown-num">${d}</div><div class="countdown-unit">${d===1?'Dia':'Dias'}</div></div>
+        <div class="countdown-sep">:</div>
+        <div class="countdown-box"><div class="countdown-num">${pad(h)}</div><div class="countdown-unit">Horas</div></div>
+        <div class="countdown-sep">:</div>
+        <div class="countdown-box"><div class="countdown-num">${pad(m)}</div><div class="countdown-unit">Min</div></div>
+        <div class="countdown-sep">:</div>
+        <div class="countdown-box"><div class="countdown-num">${pad(s)}</div><div class="countdown-unit">Seg</div></div>
+      </div>
+      <div class="countdown-progress"><div class="countdown-progress-fill" style="width:${pct}%;"></div></div>
+      <div class="countdown-sub">Primeiro jogo: 20 de outubro, ${SEASON_START.toLocaleTimeString('pt-PT', {hour:'2-digit', minute:'2-digit'})} (hora local)</div>
+    </div>`;
+}
+
 function renderUpcomingTicker(){
   const el = document.getElementById('upcomingTicker');
   const today = new Date().toISOString().slice(0,10);
-  const seasonStart = new Date('2026-10-20T00:00:00');
-  const now = new Date();
-  const daysToSeason = Math.ceil((seasonStart - now) / (1000*60*60*24));
-  const countdownHtml = daysToSeason > 0
-    ? `<div class="ticker-item" style="color:var(--gold); font-weight:600;">🏀 Faltam <b style="color:var(--gold);">${daysToSeason}</b> dia${daysToSeason===1?'':'s'} para o início da época 26-27 (20 out)</div>`
-    : '';
 
   const upcoming = ALL_GAMES.filter(g => g.game_date >= today).slice(0, 8);
-  if(!upcoming.length){ el.innerHTML = countdownHtml; return; }
-  el.innerHTML = countdownHtml + '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
+  if(!upcoming.length){ el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
     const dt = fmtGameDateTime(g);
     const time = g.status==='scheduled' ? dt.timeLabel : (g.status==='live' ? 'AO VIVO' : 'FINAL');
     return `<div class="ticker-item" style="cursor:pointer;" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">${dt.dateLabel} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
