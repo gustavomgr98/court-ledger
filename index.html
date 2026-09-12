@@ -2035,6 +2035,8 @@ function applyTheme(theme){
   localStorage.setItem('cl-theme', theme);
   const btn = document.getElementById('themeToggleBtn');
   if(btn) btn.textContent = theme==='light' ? '☀️ Claro' : '🌙 Escuro';
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if(metaTheme) metaTheme.setAttribute('content', theme==='light' ? '#F2F4F8' : '#0A1420');
 }
 
 function setTextSize(size){
