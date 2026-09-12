@@ -460,6 +460,7 @@
       <button class="tab-btn" data-tab="transacoes">Transferências</button>
       <button class="tab-btn" data-tab="comparacao">Comparação de Equipas</button>
       <button class="tab-btn" data-tab="registo">Registo</button>
+      <button class="tab-btn" data-tab="glossario">Glossário</button>
     </nav>
 
     <!-- STATS 25-26 -->
@@ -714,6 +715,16 @@
       </div>
     </section>
 
+    <!-- GLOSSARIO -->
+    <section id="tab-glossario">
+      <div class="panel">
+        <h2>Glossário</h2>
+        <div class="sub">Termos da app e regras da NBA, explicados sem termos técnicos. Escreve para filtrar.</div>
+        <div class="field"><label>Procurar termo</label><input id="glossarySearch" placeholder="ex: TS%, back-to-back, play-in" oninput="renderGlossary()"></div>
+        <div id="glossaryWrap"></div>
+      </div>
+    </section>
+
     <!-- PERFIL DE EQUIPA -->
     <section id="tab-teamprofile">
       <div class="panel">
@@ -841,6 +852,7 @@ async function enterApp(){
     setInterval(refreshLiveTicker, 24000);
     setInterval(loadCalendar, 24000);
     updateSeasonCountdown();
+    renderGlossary();
     setInterval(updateSeasonCountdown, 1000);
     await loadBankroll();
     await loadBetsList();
@@ -1938,6 +1950,44 @@ async function loadCalibration(){
   }
 
   wrap.innerHTML = html;
+}
+
+const GLOSSARY = [
+  {cat:'Termos da app', term:'Rating composto', def:'O número que resume a força de uma equipa: PTS + 0,7×REB + 0,7×AST − 0,7×Perdas de bola + 0,7×Roubos + 0,7×Desarmes + 50×TS%. Pesado pelos minutos de cada jogador (um titular conta mais que um suplente).'},
+  {cat:'Termos da app', term:'TS% (Verdadeira Percentagem de Acerto)', def:'Mede a eficiência total de pontuação, incluindo lances livres — mais completo que o FG% ou eFG% simples, que só olham a lançamentos de campo.'},
+  {cat:'Termos da app', term:'Mistura de épocas (blend)', def:'Cada jogador começa a época 26-27 a usar 100% os números da época passada (25-26), e vai migrando aos poucos para os dados novos à medida que disputa jogos reais — 10 jogos = 100% baseado já na época nova.'},
+  {cat:'Termos da app', term:'Vantagem de casa', def:'Bónus dado à equipa que joga em casa, calculado diretamente da diferença média real de pontuação nos nossos próprios jogos (não é um valor assumido de fora).'},
+  {cat:'Termos da app', term:'Back-to-back (penalização)', def:'Quando uma equipa joga com 0-1 dias de descanso, o modelo aplica uma penalização no rating, medida nos jogos reais que já temos — equipas cansadas marcam, em média, menos pontos de diferença.'},
+  {cat:'Termos da app', term:'Fiabilidade', def:'Selo colorido (Não fiável → Excelente) que mostra se as previsões do modelo acertam o que prometem, com um mínimo de 10 resultados antes de mostrar qualquer percentagem.'},
+  {cat:'Termos da app', term:'ROI (Retorno sobre o Investimento)', def:'Percentagem de lucro ou prejuízo face ao total apostado: (Lucro ÷ Total Apostado) × 100. Só conta apostas que tu ou o Gonçalo registarem.'},
+  {cat:'Termos da app', term:'Calibração', def:'Verificação automática e diária que confirma se as previsões do modelo (Vencedor, Total, Handicap, Total por Equipa) batem certo com o que realmente aconteceu nos jogos.'},
+  {cat:'Termos da app', term:'Odd justa', def:'A odd que corresponderia exatamente à probabilidade do modelo, sem vantagem nem desvantagem para nenhum lado. Odds acima disso (com margem) é que representam valor real.'},
+  {cat:'Termos da app', term:'Erro médio / Viés', def:'Para Total/Handicap: o erro médio diz por quantos pontos a previsão costuma falhar; o viés diz se costuma sobrestimar ou subestimar, em média.'},
+  {cat:'Regras da NBA', term:'Play-in tournament', def:'Mini-torneio entre os lugares 7º a 10º de cada conferência, disputado antes dos playoffs, para decidir as últimas duas vagas de cada lado.'},
+  {cat:'Regras da NBA', term:'Defensive three seconds', def:'Um defesa não pode ficar mais de 3 segundos seguidos dentro do garrafão sem estar a marcar de perto um adversário — se violar, é lance livre técnico + posse para o ataque.'},
+  {cat:'Regras da NBA', term:'Shot clock', def:'Relógio de posse de 24 segundos — a equipa tem de lançar ao cesto (com o lançamento a tocar no aro, no mínimo) antes de esgotar, ou perde a bola.'},
+  {cat:'Regras da NBA', term:'Bonus / lances livres em falta coletiva', def:'A partir da 5ª falta coletiva de uma equipa num período, qualquer falta seguinte (mesmo sem lançamento) dá lances livres ao adversário.'},
+  {cat:'Regras da NBA', term:'Falta técnica / desqualificante', def:'Técnica: conduta antidesportiva (discussão, gesto), dá 1 lance livre ao adversário. Desqualificante (flagrante 2): contacto violento/perigoso, expulsão imediata do jogo.'},
+  {cat:'Regras da NBA', term:'Trade deadline', def:'Data limite da época (normalmente início de fevereiro) depois da qual as equipas já não podem trocar jogadores até ao verão seguinte.'},
+  {cat:'Regras da NBA', term:'Luxury tax (imposto de luxo)', def:'Imposto que as equipas pagam à liga se a folha salarial ultrapassar um certo limite — penaliza equipas que gastam muito acima da média.'},
+  {cat:'Regras da NBA', term:'Prolongamento (overtime)', def:'Período extra de 5 minutos jogado quando o jogo termina empatado no fim do tempo regulamentar — repete-se as vezes que forem precisas até haver vencedor.'},
+];
+
+function renderGlossary(){
+  const wrap = document.getElementById('glossaryWrap');
+  const q = (document.getElementById('glossarySearch').value || '').toLowerCase().trim();
+  const filtered = GLOSSARY.filter(g => !q || g.term.toLowerCase().includes(q) || g.def.toLowerCase().includes(q));
+  if(!filtered.length){ wrap.innerHTML = '<div class="empty">Nenhum termo encontrado.</div>'; return; }
+  const cats = [...new Set(filtered.map(g=>g.cat))];
+  wrap.innerHTML = cats.map(cat => `
+    <div class="sw-title" style="margin-top:18px;">${cat}</div>
+    ${filtered.filter(g=>g.cat===cat).map(g => `
+      <div class="context-card" style="margin-top:8px;">
+        <div class="cc-team">${g.term}</div>
+        <div class="sub" style="margin-top:4px; margin-bottom:0;">${g.def}</div>
+      </div>
+    `).join('')}
+  `).join('');
 }
 
 function reliabilityLabel(pct, n, minN){
