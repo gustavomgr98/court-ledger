@@ -327,6 +327,7 @@
   @keyframes glow{0%,100%{box-shadow:0 0 0 rgba(240,187,62,0);} 50%{box-shadow:0 0 22px rgba(240,187,62,0.25);}}
   .pct{transition:color .3s ease;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -617,7 +618,7 @@
           <div class="field"><label>Stake (€)</label><input id="betStake" type="number" step="0.01" placeholder="ex: 10"></div>
         </div>
         <button class="primary" onclick="submitBet()">Registar aposta</button>
-        <button class="ghost" style="margin-top:8px;" onclick="exportBetsCSV()">⬇️ Exportar para CSV</button>
+        <button class="ghost" style="margin-top:8px;" onclick="exportBetsCSV()">⬇️ Exportar para Excel</button>
         <div id="betsListWrap" style="margin-top:20px; overflow-x:auto; -webkit-overflow-scrolling:touch;"></div>
       </div>
     </section>
@@ -1999,18 +2000,12 @@ async function deleteBet(id){
   await loadBankroll(); await loadBetsList();
 }
 
-function downloadCSV(filename, headers, rows){
-  const csvEscape = (v)=> `"${String(v==null?'':v).replace(/"/g,'""')}"`;
-  const csv = [headers.map(csvEscape).join(','), ...rows.map(r=>r.map(csvEscape).join(','))].join('\n');
-  const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function downloadXLSX(filename, headers, rows){
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws['!cols'] = headers.map(h => ({ wch: Math.max(10, h.length + 2) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Apostas');
+  XLSX.writeFile(wb, filename);
 }
 
 async function exportBetsCSV(){
@@ -2031,7 +2026,7 @@ async function exportBetsCSV(){
   const today = new Date().toISOString().slice(0,10);
   Object.keys(byPerson).forEach(name=>{
     const safeName = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-');
-    downloadCSV(`court-ledger-apostas-${safeName}-${today}.csv`, headers, byPerson[name].map(toRow));
+    downloadXLSX(`court-ledger-apostas-${safeName}-${today}.xlsx`, headers, byPerson[name].map(toRow));
   });
 }
 
