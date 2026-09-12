@@ -1799,21 +1799,33 @@ async function loadCalibration(){
   }
 
   const {data: proj} = await sb.from('projection_accuracy').select('*').single();
-  html += `<div class="sw-title" style="margin-top:22px;">Total de Pontos, Handicap & Total por Equipa — erro médio</div>`;
+  const {data: breakdown} = await sb.from('market_reliability_breakdown').select('*');
+  const byMarket = {};
+  (breakdown||[]).forEach(r=> byMarket[r.market] = r);
+  const marketBadge = (key)=>{
+    const r = byMarket[key];
+    if(!r) return '<span class="ts">sem amostra</span>';
+    const rel = reliabilityLabel(r.pct||0, r.n_checks);
+    return `<b>${r.n_checks>=10 ? r.pct.toFixed(1)+'%' : '—'}</b> <span class="sw-tag ${rel.cls}" style="font-size:10px;">${rel.label}</span>`;
+  };
+  html += `<div class="sw-title" style="margin-top:22px;">Total de Pontos, Handicap & Total por Equipa — fiabilidade e erro médio</div>`;
   if(proj && proj.n >= 10){
     html += `<div class="context-grid">
       <div class="context-card">
         <div class="cc-team">Total de pontos (${proj.n} jogos)</div>
+        <div class="cc-row"><span class="cc-label">Fiabilidade</span><span class="cc-val">${marketBadge('total')}</span></div>
         <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_total} pts</span></div>
         <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_total>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_total)} pts</span></div>
       </div>
       <div class="context-card">
         <div class="cc-team">Handicap / Margem (${proj.n} jogos)</div>
+        <div class="cc-row"><span class="cc-label">Fiabilidade</span><span class="cc-val">${marketBadge('handicap')}</span></div>
         <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_margin} pts</span></div>
         <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_margin>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_margin)} pts</span></div>
       </div>
       <div class="context-card">
         <div class="cc-team">Total por Equipa (${proj.n} jogos, 2 equipas cada)</div>
+        <div class="cc-row"><span class="cc-label">Fiabilidade</span><span class="cc-val">${marketBadge('total_equipa')}</span></div>
         <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_team_total} pts</span></div>
         <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_team_total>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_team_total)} pts</span></div>
       </div>
