@@ -1999,25 +1999,40 @@ async function deleteBet(id){
   await loadBankroll(); await loadBetsList();
 }
 
-async function exportBetsCSV(){
-  const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:true});
-  if(!data || !data.length){ alert('Sem apostas para exportar.'); return; }
-  const headers = ['Data','Quem','Confronto','Mercado','Equipa','Linha','Lado','Odd','Stake','Resultado','Lucro/Prejuizo','Auto'];
+function downloadCSV(filename, headers, rows){
   const csvEscape = (v)=> `"${String(v==null?'':v).replace(/"/g,'""')}"`;
-  const rows = data.map(b => [
-    b.placed_at, b.registered_by||'', b.matchup||b.pick||'', b.market_type, b.team||'', b.line??'', b.side||'',
-    b.odds??'', b.stake, b.result, b.profit_loss??'', b.auto_resolved?'Sim':'Não'
-  ].map(csvEscape).join(','));
-  const csv = [headers.map(csvEscape).join(','), ...rows].join('\n');
+  const csv = [headers.map(csvEscape).join(','), ...rows.map(r=>r.map(csvEscape).join(','))].join('\n');
   const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `court-ledger-apostas-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+async function exportBetsCSV(){
+  const {data} = await sb.from('bets').select('*').order('placed_at', {ascending:true});
+  if(!data || !data.length){ alert('Sem apostas para exportar.'); return; }
+  const headers = ['Data','Confronto','Mercado','Equipa','Linha','Lado','Odd','Stake','Resultado','Lucro/Prejuizo','Auto'];
+  const toRow = (b)=> [
+    b.placed_at, b.matchup||b.pick||'', b.market_type, b.team||'', b.line??'', b.side||'',
+    b.odds??'', b.stake, b.result, b.profit_loss??'', b.auto_resolved?'Sim':'Não'
+  ];
+
+  const byPerson = {};
+  data.forEach(b=>{
+    const key = b.registered_by || 'sem-registo';
+    (byPerson[key] = byPerson[key] || []).push(b);
+  });
+
+  const today = new Date().toISOString().slice(0,10);
+  Object.keys(byPerson).forEach(name=>{
+    const safeName = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-');
+    downloadCSV(`court-ledger-apostas-${safeName}-${today}.csv`, headers, byPerson[name].map(toRow));
+  });
 }
 
 function renderMarketSummary(a, b, formA, formB, splitA, splitB){
