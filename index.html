@@ -2361,7 +2361,7 @@ async function refreshLiveTicker(){
   track.innerHTML = items + items; // duplicado para o scroll continuo (loop de 50%) ficar sem cortes
   // duracao proporcional ao numero de jogos, para o ritmo por jogo se manter sempre igual
   // (mais jogos ao vivo = volta total mais longa, mas cada jogo passa sempre a mesma velocidade)
-  track.style.animationDuration = `${Math.max(1.5, data.length * 0.9)}s`;
+  track.style.animationDuration = `${Math.max(4, data.length * 2)}s`;
   ticker.classList.add('show');
   if(fab) fab.style.bottom = '54px';
 }
