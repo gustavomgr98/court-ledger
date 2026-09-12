@@ -805,6 +805,7 @@ async function enterApp(){
     await refreshLiveTicker();
     setupTickerDrag();
     setInterval(refreshLiveTicker, 24000);
+    setInterval(loadCalendar, 24000);
     updateSeasonCountdown();
     setInterval(updateSeasonCountdown, 1000);
     await loadBankroll();
@@ -2464,12 +2465,11 @@ function renderUpcomingTicker(){
   const el = document.getElementById('upcomingTicker');
   const today = new Date().toISOString().slice(0,10);
 
-  const upcoming = ALL_GAMES.filter(g => g.game_date >= today).slice(0, 8);
+  const upcoming = ALL_GAMES.filter(g => g.game_date >= today && g.status === 'scheduled').slice(0, 8);
   if(!upcoming.length){ el.innerHTML = ''; return; }
   el.innerHTML = '<div class="ticker-label">PRÓXIMOS</div>' + upcoming.map(g=>{
     const dt = fmtGameDateTime(g);
-    const time = g.status==='scheduled' ? dt.timeLabel : (g.status==='live' ? 'AO VIVO' : 'FINAL');
-    return `<div class="ticker-item" style="cursor:pointer;" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">${dt.dateLabel} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${time}</div>`;
+    return `<div class="ticker-item" style="cursor:pointer;" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">${dt.dateLabel} · <b>${g.away_team}</b> @ <b>${g.home_team}</b> · ${dt.timeLabel}</div>`;
   }).join('');
 }
 
