@@ -240,7 +240,7 @@
   #liveTicker .live-dot{width:6px; height:6px; border-radius:50%; background:var(--loss); animation:pulse 1.1s ease-in-out infinite;}
   #liveTicker .ticker-track{
     display:flex; align-items:center; height:100%; white-space:nowrap;
-    animation:ticker-scroll 30s linear infinite; padding-left:70px; touch-action:pan-y; cursor:grab;
+    animation:ticker-scroll 12s linear infinite; padding-left:70px; touch-action:none; cursor:grab;
   }
   #liveTicker .ticker-track:hover{animation-play-state:paused;}
   #liveTicker .ticker-track.dragging{cursor:grabbing;}
@@ -2369,8 +2369,8 @@ function setupTickerDrag(){
     track.style.transform = '';
     track.style.animationPlayState = 'running';
   };
-  track.addEventListener('touchstart', (e)=> start(e.touches[0].clientX), {passive:true});
-  track.addEventListener('touchmove', (e)=> move(e.touches[0].clientX), {passive:true});
+  track.addEventListener('touchstart', (e)=>{ e.preventDefault(); start(e.touches[0].clientX); }, {passive:false});
+  track.addEventListener('touchmove', (e)=>{ e.preventDefault(); move(e.touches[0].clientX); }, {passive:false});
   track.addEventListener('touchend', end);
   track.addEventListener('mousedown', (e)=> start(e.clientX));
   window.addEventListener('mousemove', (e)=> move(e.clientX));
