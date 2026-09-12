@@ -239,13 +239,11 @@
   }
   #liveTicker .live-dot{width:6px; height:6px; border-radius:50%; background:var(--loss); animation:pulse 1.1s ease-in-out infinite;}
   #liveTicker .ticker-track{
-    display:flex; align-items:center; height:100%; white-space:nowrap;
-    animation:ticker-scroll linear infinite;
+    display:flex; align-items:center; height:100%; white-space:nowrap; will-change:transform;
   }
   #liveTicker .live-item{display:inline-flex; align-items:center; gap:7px; padding:0 22px; font-family:'Roboto Mono',monospace; font-size:12px; border-right:1px solid var(--line);}
   #liveTicker .live-item b{color:var(--ink); font-weight:600;}
   #liveTicker .live-item .lq{color:var(--gold); font-size:10px;}
-  @keyframes ticker-scroll{from{transform:translateX(0);} to{transform:translateX(-50%);}}
 
   #kobeFab{
     position:fixed; bottom:20px; right:20px; width:58px; height:58px; border-radius:50%;
@@ -2343,6 +2341,28 @@ function setupTickerDrag(){
   // fica so o scroll automatico continuo, que ja funciona bem.
 }
 
+let TICKER_ANIM = { offset: 0, rafId: null, lastTime: null, speed: 45 };
+
+function startTickerLoop(){
+  const track = document.getElementById('liveTickerTrack');
+  if(!track || TICKER_ANIM.rafId) return; // ja esta a correr, nao arranca outro em paralelo
+  function step(now){
+    if(TICKER_ANIM.lastTime == null) TICKER_ANIM.lastTime = now;
+    const dt = (now - TICKER_ANIM.lastTime) / 1000;
+    TICKER_ANIM.lastTime = now;
+    const halfWidth = track.scrollWidth / 2;
+    if(halfWidth > 0){
+      TICKER_ANIM.offset -= TICKER_ANIM.speed * dt;
+      // ao ultrapassar meia largura (uma copia inteira), volta a somar essa largura -
+      // como e o mesmo conteudo duplicado, isto e completamente impercetivel, sem saltos.
+      while(TICKER_ANIM.offset <= -halfWidth) TICKER_ANIM.offset += halfWidth;
+      track.style.transform = `translateX(${TICKER_ANIM.offset}px)`;
+    }
+    TICKER_ANIM.rafId = requestAnimationFrame(step);
+  }
+  TICKER_ANIM.rafId = requestAnimationFrame(step);
+}
+
 async function refreshLiveTicker(){
   const {data} = await sb.from('games').select('*').eq('status','live');
   const ticker = document.getElementById('liveTicker');
@@ -2358,13 +2378,10 @@ async function refreshLiveTicker(){
       ${teamPill(g.away_team)} <b>${g.away_score ?? 0}</b> — <b>${g.home_score ?? 0}</b> ${teamPill(g.home_team)}
       ${g.game_time ? `<span class="lq">${g.game_time}</span>` : ''}
     </span>`).join('');
-  track.innerHTML = items + items; // duplicado para o scroll continuo (loop de 50%) ficar sem cortes
-  // duracao proporcional ao numero de jogos, para o ritmo por jogo se manter sempre igual
-  // (mais jogos ao vivo = volta total mais longa, mas cada jogo passa sempre a mesma velocidade)
-  const newDuration = `${Math.max(4, data.length * 2)}s`;
-  if(track.style.animationDuration !== newDuration) track.style.animationDuration = newDuration;
+  track.innerHTML = items + items; // duplicado para o loop (ver startTickerLoop) ficar sem cortes
   ticker.classList.add('show');
   if(fab) fab.style.bottom = '54px';
+  startTickerLoop(); // so arranca a primeira vez; depois disso, o proprio requestAnimationFrame continua sozinho
 }
 
 function renderUpcomingTicker(){
