@@ -1674,17 +1674,13 @@ async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNo
       calibNote = `Só ${calib.n_predictions} previsão(ões) resolvida(s) nesta faixa até agora — amostra pequena de mais para confiar no histórico.`;
     }
   } else {
-    if(marketKey === 'teamtotal'){
-      calibNote = 'Ainda sem histórico de calibração específico para total por equipa individual — usa com mais cautela.';
+    const {data: proj} = await sb.from('projection_accuracy').select('*').single();
+    if(proj && proj.n >= 10){
+      const mae = marketKey === 'total' ? proj.mae_total : marketKey === 'teamtotal' ? proj.mae_team_total : proj.mae_margin;
+      const bias = marketKey === 'total' ? proj.bias_total : marketKey === 'teamtotal' ? proj.bias_team_total : proj.bias_margin;
+      calibNote = `Histórico do modelo neste tipo de projeção (${proj.n} jogos): erro médio de ±${mae} pontos, com viés de ${bias>0?'sobrestimar':'subestimar'} em ${Math.abs(bias)} pontos em média — usa isso para calibrar a tua confiança na linha acima.`;
     } else {
-      const {data: proj} = await sb.from('projection_accuracy').select('*').single();
-      if(proj && proj.n >= 10){
-        const mae = marketKey === 'total' ? proj.mae_total : proj.mae_margin;
-        const bias = marketKey === 'total' ? proj.bias_total : proj.bias_margin;
-        calibNote = `Histórico do modelo neste tipo de projeção (${proj.n} jogos): erro médio de ±${mae} pontos, com viés de ${bias>0?'sobrestimar':'subestimar'} em ${Math.abs(bias)} pontos em média — usa isso para calibrar a tua confiança na linha acima.`;
-      } else {
-        calibNote = 'Ainda sem histórico suficiente para validar a qualidade destas projeções (Total/Handicap) — usa com mais cautela do que o Vencedor.';
-      }
+      calibNote = 'Ainda sem histórico suficiente para validar a qualidade destas projeções (Total/Handicap/Total por Equipa) — usa com mais cautela do que o Vencedor.';
     }
   }
 
@@ -1790,7 +1786,7 @@ async function loadCalibration(){
   html += '</tbody></table>';
 
   const {data: proj} = await sb.from('projection_accuracy').select('*').single();
-  html += `<div class="sw-title" style="margin-top:22px;">Total de Pontos & Handicap (projeções)</div>`;
+  html += `<div class="sw-title" style="margin-top:22px;">Total de Pontos, Handicap & Total por Equipa (projeções)</div>`;
   if(proj && proj.n >= 10){
     html += `<div class="context-grid">
       <div class="context-card">
@@ -1802,6 +1798,11 @@ async function loadCalibration(){
         <div class="cc-team">Handicap / Margem (${proj.n} jogos)</div>
         <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_margin} pts</span></div>
         <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_margin>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_margin)} pts</span></div>
+      </div>
+      <div class="context-card">
+        <div class="cc-team">Total por Equipa (${proj.n} jogos, 2 equipas cada)</div>
+        <div class="cc-row"><span class="cc-label">Erro médio</span><span class="cc-val">±${proj.mae_team_total} pts</span></div>
+        <div class="cc-row" style="border-bottom:none;"><span class="cc-label">Viés</span><span class="cc-val">${proj.bias_team_total>0?'sobrestima':'subestima'} ${Math.abs(proj.bias_team_total)} pts</span></div>
       </div>
     </div>`;
   } else {
