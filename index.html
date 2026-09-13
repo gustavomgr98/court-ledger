@@ -2942,8 +2942,8 @@ async function renderDailyPicks(){
       </div>
     `).join('')}
     ${(highestTotal||closestGame||biggestBlowout||highestTeamScore) ? `<div class="sw-title" style="margin-top:12px;">Outros mercados</div>` : ''}
-    ${highestTotal ? pickRow(`${teamPill(highestTotal.g.away_team)} @ ${teamPill(highestTotal.g.home_team)}`, 'Total mais alto esperado do dia', `${highestTotal.projTotal.toFixed(1)} pts`, highestTotal.g) : ''}
-    ${highestTeamScore ? pickRow(`${teamPill(highestTeamScore.g.away_team)} @ ${teamPill(highestTeamScore.g.home_team)}`, 'Maior pontuação individual esperada (Total por Equipa)', `${teamPill(highestTeamScore.team)} ${highestTeamScore.score.toFixed(1)} pts`, highestTeamScore.g) : ''}
+    ${highestTotal ? pickRow(`${teamPill(highestTotal.g.away_team)} @ ${teamPill(highestTotal.g.home_team)}`, '📊 Total do Jogo (as duas equipas juntas) mais alto do dia', `${highestTotal.projTotal.toFixed(1)} pts`, highestTotal.g) : ''}
+    ${highestTeamScore ? pickRow(`${teamPill(highestTeamScore.g.away_team)} @ ${teamPill(highestTeamScore.g.home_team)}`, `📊 Total por Equipa — ${highestTeamScore.team} sozinha, a pontuação mais alta esperada do dia`, `${teamPill(highestTeamScore.team)} ${highestTeamScore.score.toFixed(1)} pts`, highestTeamScore.g) : ''}
     ${closestGame ? pickRow(`${teamPill(closestGame.g.away_team)} @ ${teamPill(closestGame.g.home_team)}`, 'Jogo mais equilibrado do dia (handicap quase 0)', `${teamPill(closestGame.projMargin>=0?closestGame.g.home_team:closestGame.g.away_team)} ${closestGame.projMargin>=0?'+':''}${closestGame.projMargin.toFixed(1)} pts`, closestGame.g) : ''}
     ${biggestBlowout && biggestBlowout.g.id !== closestGame?.g.id ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Maior favoritismo esperado (handicap)', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g) : ''}
   </div>`;
