@@ -2933,23 +2933,6 @@ async function renderDailyPicks(){
 
   wrap.innerHTML = `<div class="daily-picks-card">
     <div class="daily-picks-title">🏆 Destaques do Dia — ${dateLabel}</div>
-    <div class="daily-picks-sub">Convicção do modelo entre os jogos agendados — não uma deteção de valor real (isso exige odds reais que não temos).</div>
-    <div class="sw-title" style="margin-top:2px;">Favoritas mais claras (Vencedor)</div>
-    ${topVencedor.map(p => `
-      <div class="daily-pick-row" onclick="openComparisonFromGame('${p.g.away_team}','${p.g.home_team}')" style="align-items:flex-start; flex-direction:column;">
-        <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
-          <div class="daily-pick-matchup">${teamPill(p.g.away_team)} @ ${teamPill(p.g.home_team)}</div>
-          <div class="daily-pick-pct">${teamPill(p.favTeam)} ${(p.favPct*100).toFixed(0)}%</div>
-        </div>
-        ${p.reasons && p.reasons.length ? `<ul style="margin:5px 0 0; padding-left:16px; font-size:11px; color:var(--ink-dim);">
-          ${p.reasons.map(r=>`<li>${r}</li>`).join('')}
-        </ul>` : `<div class="daily-pick-tag">diferença normal de nível + vantagem de casa</div>`}
-      </div>
-    `).join('')}
-    ${(highestTotal||closestGame||biggestBlowout) ? `<div class="sw-title" style="margin-top:12px;">Outros mercados</div>` : ''}
-    ${highestTotal ? pickRow(`${teamPill(highestTotal.g.away_team)} @ ${teamPill(highestTotal.g.home_team)}`, 'Total mais alto esperado do dia', `${highestTotal.projTotal.toFixed(1)} pts`, highestTotal.g) : ''}
-    ${closestGame ? pickRow(`${teamPill(closestGame.g.away_team)} @ ${teamPill(closestGame.g.home_team)}`, 'Jogo mais equilibrado do dia (handicap quase 0)', `${teamPill(closestGame.projMargin>=0?closestGame.g.home_team:closestGame.g.away_team)} ${closestGame.projMargin>=0?'+':''}${closestGame.projMargin.toFixed(1)} pts`, closestGame.g) : ''}
-    ${biggestBlowout && biggestBlowout.g.id !== closestGame?.g.id ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Maior favoritismo esperado (handicap)', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g) : ''}
     ${renderComboSuggestions(picks)}
   </div>`;
 }
@@ -2977,17 +2960,18 @@ function renderComboSuggestions(picks){
   const tripla = pool.length >= 3 ? buildCombo(3) : null;
 
   const comboBlock = (combo, title)=> `
-    <div class="context-card" style="margin-top:8px;">
-      <div class="cc-team">${title}</div>
-      ${combo.legs.map(l => `<div class="cc-row"><span class="cc-label">${l.matchup} — ${l.label}</span><span class="cc-val">${(l.favPct*100).toFixed(0)}%</span></div>`).join('')}
-      <div class="cc-row" style="border-bottom:none;"><span class="cc-label"><b>Combinada</b></span><span class="cc-val"><b>${(combo.combinedProb*100).toFixed(1)}% · odd justa ${combo.combinedOdd.toFixed(2)}</b></span></div>
+    <div class="daily-pick-row" style="cursor:default;">
+      <div>
+        <div class="daily-pick-matchup">${title}</div>
+        <div class="daily-pick-tag">${combo.legs.map(l=>l.label).join(' + ')}</div>
+      </div>
+      <div class="daily-pick-pct">odd ${combo.combinedOdd.toFixed(2)}</div>
     </div>`;
 
   return `
-    <div class="sw-title" style="margin-top:14px;">Apostas combinadas (Vencedor + Total, a perna mais confiante de cada jogo)</div>
-    <div class="sub" style="margin-bottom:0;">⚠️ Combinar <b>multiplica o risco</b> — só ganhas se <b>todas</b> as pernas acertarem. Cada jogo entra só uma vez, para as pernas ficarem independentes entre si. Não é "mais garantido", é maior risco por maior retorno potencial.</div>
-    ${comboBlock(dupla, `Dupla`)}
-    ${tripla ? comboBlock(tripla, `Tripla`) : ''}
+    ${comboBlock(dupla, 'Melhor Dupla')}
+    ${tripla ? comboBlock(tripla, 'Melhor Tripla') : ''}
+    <div class="sub" style="margin-top:6px; margin-bottom:0;">⚠️ Combinar multiplica o risco — só ganhas se todas as pernas acertarem.</div>
   `;
 }
 
