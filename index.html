@@ -2896,7 +2896,7 @@ async function renderDailyPicks(){
     <div class="sw-title" style="margin-top:2px;">Favoritas mais claras (Vencedor)</div>
     ${topVencedor.map(p => pickRow(
       `${teamPill(p.g.away_team)} @ ${teamPill(p.g.home_team)}`,
-      p.tags.filter(t=>t!=='casa').join(', ') || 'sem fatores extra',
+      p.tags.filter(t=>t!=='casa').join(', ') || 'diferença normal de nível + vantagem de casa, sem back-to-back nem outros fatores',
       `${teamPill(p.favTeam)} ${(p.favPct*100).toFixed(0)}%`,
       p.g
     )).join('')}
