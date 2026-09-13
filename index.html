@@ -228,6 +228,18 @@
   .sw-tag.strength{background:rgba(42,217,194,0.12); color:var(--teal); border:1px solid rgba(42,217,194,0.3);}
   .sw-tag.weakness{background:rgba(255,92,108,0.10); color:var(--loss); border:1px solid rgba(255,92,108,0.3);}
 
+  /* Grelha de mercados, estilo casa de apostas: linhas densas, odds em botoes bem visiveis */
+  .odds-grid{width:100%; border-collapse:separate; border-spacing:0 6px;}
+  .odds-grid tr{background:var(--bg-2);}
+  .odds-market-label{padding:10px 4px 10px 12px; font-size:12px; color:var(--ink-dim); border-radius:6px 0 0 6px; width:46%;}
+  .odds-cell{padding:6px; text-align:center; width:27%;}
+  .odds-cell:last-child{border-radius:0 6px 6px 0;}
+  .odds-side{display:block; font-size:9.5px; text-transform:uppercase; letter-spacing:0.4px; color:var(--ink-dim); font-family:'Roboto Mono',monospace;}
+  .odds-num{
+    display:block; font-family:'Oswald',sans-serif; font-weight:700; font-size:17px; color:var(--ink);
+    background:var(--panel-raised); border:1px solid var(--line); border-radius:5px; padding:4px 2px; margin-top:3px;
+  }
+
   .market-card{
     background:var(--bg-2); border:1px solid var(--line); border-radius:8px;
     padding:15px 17px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:12px;
@@ -262,6 +274,21 @@
   #liveTicker .live-item{display:inline-flex; align-items:center; gap:7px; padding:0 22px; font-family:'Roboto Mono',monospace; font-size:12px; border-right:1px solid var(--line);}
   #liveTicker .live-item b{color:var(--ink); font-weight:600;}
   #liveTicker .live-item .lq{color:var(--gold); font-size:10px;}
+
+  /* Talao de aposta flutuante, tipo bet slip de casa de apostas */
+  #betSlipFab{
+    display:none; position:fixed; left:16px; right:16px; bottom:90px; z-index:997;
+    align-items:center; gap:10px; padding:12px 14px; border-radius:12px; cursor:pointer;
+    background:linear-gradient(135deg, var(--paint), var(--paint-dim));
+    box-shadow:0 10px 28px rgba(255,122,61,0.35); animation:betSlipPulse 2s ease-in-out infinite;
+  }
+  #betSlipFab.show{display:flex;}
+  .bet-slip-icon{font-size:22px;}
+  .bet-slip-body{flex:1; min-width:0;}
+  .bet-slip-title{font-family:'Oswald',sans-serif; font-weight:700; font-size:12.5px; color:#1A0D00; text-transform:uppercase; letter-spacing:0.4px;}
+  .bet-slip-text{font-family:'Roboto Mono',monospace; font-size:11.5px; color:#1A0D00; opacity:0.85; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .bet-slip-arrow{font-size:22px; font-weight:700; color:#1A0D00;}
+  @keyframes betSlipPulse{0%,100%{box-shadow:0 10px 28px rgba(255,122,61,0.35);} 50%{box-shadow:0 10px 34px rgba(255,122,61,0.55);}}
 
   #kobeFab{
     position:fixed; bottom:20px; right:20px; width:58px; height:58px; border-radius:50%;
@@ -608,6 +635,12 @@
         <div id="marketSummaryWrap"></div>
       </div>
 
+      <div class="panel market-grid-panel">
+        <h2>Linhas do Modelo <span class="season-pill s2627">tipo casa de apostas</span></h2>
+        <div class="sub">Odd justa de cada mercado, os dois lados lado a lado — compara com o que a casa de apostas oferece.</div>
+        <div id="marketGridWrap"></div>
+      </div>
+
       <div class="panel">
         <h2>Verificador de Valor</h2>
         <div class="sub">Mete a odd real que encontraste e o instrumento diz se há vantagem — cobre Vencedor, Total de Pontos, Handicap e Total por Equipa. Vencedor tem calibração histórica real a validar; os restantes usam a variação real de pontuação da liga para converter a nossa projeção em probabilidade.</div>
@@ -803,6 +836,16 @@
     <div id="liveTicker">
       <div class="live-badge"><span class="live-dot"></span>AO VIVO</div>
       <div class="ticker-track" id="liveTickerTrack"></div>
+    </div>
+
+    <!-- TALAO DE APOSTA: aparece quando ha valor detetado -->
+    <div id="betSlipFab" onclick="openBetSlip()">
+      <span class="bet-slip-icon">💰</span>
+      <div class="bet-slip-body">
+        <div class="bet-slip-title">Valor detetado</div>
+        <div class="bet-slip-text" id="betSlipText"></div>
+      </div>
+      <span class="bet-slip-arrow">›</span>
     </div>
 
     <!-- KOBE: bolha flutuante, visivel em qualquer separador -->
@@ -1553,6 +1596,7 @@ async function onTeamsChanged(){
   renderCourtsForBothTeams();
   await renderComparison();
   await renderFormAndHistory();
+  renderMarketGrid();
 }
 
 function buildPlayerComparisonText(){
@@ -1725,6 +1769,72 @@ function erf(x){
 }
 function normalCdf(x, mean, sd){ return 0.5*(1+erf((x-mean)/(sd*Math.sqrt(2)))); }
 
+async function renderMarketGrid(){
+  const wrap = document.getElementById('marketGridWrap');
+  if(!wrap) return;
+  if(!LAST_WINPROB || !LAST_VALUE_MATCHUP){ wrap.innerHTML = '<div class="empty">Escolhe duas equipas para ver as linhas.</div>'; return; }
+  const {a, b} = LAST_VALUE_MATCHUP;
+  const {pA, pB} = LAST_WINPROB;
+
+  const {data: varData} = await sb.rpc('get_scoring_variance');
+  const v = varData?.[0];
+  const oddFor = (p)=> p>0 ? (1/p).toFixed(2) : '—';
+
+  let rows = [];
+  rows.push({
+    label: 'Vencedor',
+    left: {name: a, odd: oddFor(pA)},
+    right: {name: b, odd: oddFor(pB)},
+  });
+
+  if(v && v.n_games && LAST_FORM?.a && LAST_FORM?.b){
+    const expA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
+    const expB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+    const projTotal = expA + expB;
+    const line = Math.round(projTotal*2)/2; // arredonda a 0.5 mais proximo, como uma casa real faria
+    const probOver = 1 - normalCdf(line, projTotal, v.sd_total);
+    rows.push({
+      label: `Total (linha ${line})`,
+      left: {name: 'Over', odd: oddFor(probOver)},
+      right: {name: 'Under', odd: oddFor(1-probOver)},
+    });
+
+    const margin = expA - expB; // positivo = A favorita
+    const handicapLine = Math.round(margin*2)/2;
+    const probACover = 1 - normalCdf(-handicapLine, margin, v.sd_margin);
+    rows.push({
+      label: `Handicap (${a} ${handicapLine>0?'-':'+'}${Math.abs(handicapLine)})`,
+      left: {name: a, odd: oddFor(probACover)},
+      right: {name: b, odd: oddFor(1-probACover)},
+    });
+
+    const teamLineA = Math.round(expA*2)/2, teamLineB = Math.round(expB*2)/2;
+    const probOverA = 1 - normalCdf(teamLineA, expA, v.sd_team_score);
+    const probOverB = 1 - normalCdf(teamLineB, expB, v.sd_team_score);
+    rows.push({
+      label: `Total ${a} (${teamLineA})`,
+      left: {name: 'Over', odd: oddFor(probOverA)},
+      right: {name: 'Under', odd: oddFor(1-probOverA)},
+    });
+    rows.push({
+      label: `Total ${b} (${teamLineB})`,
+      left: {name: 'Over', odd: oddFor(probOverB)},
+      right: {name: 'Under', odd: oddFor(1-probOverB)},
+    });
+  }
+
+  wrap.innerHTML = `<table class="odds-grid"><tbody>
+    ${rows.map(r => `
+      <tr>
+        <td class="odds-market-label">${r.label}</td>
+        <td class="odds-cell"><span class="odds-side">${r.left.name}</span><span class="odds-num">${r.left.odd}</span></td>
+        <td class="odds-cell"><span class="odds-side">${r.right.name}</span><span class="odds-num">${r.right.odd}</span></td>
+      </tr>
+    `).join('')}
+  </tbody></table>
+  <div class="sub" style="margin-top:8px; margin-bottom:0;">Odds justas do modelo (sem margem de casa) — usa como referência ao comparar com o que encontrares numa casa real.</div>`;
+}
+
 async function computeCurrentModelProb(){
   const mkt = document.getElementById('valueMarketType').value;
   if(!LAST_WINPROB || !LAST_VALUE_MATCHUP) return null;
@@ -1878,6 +1988,20 @@ async function renderValueResult(wrap, label, modelProb, odd, marketKey, extraNo
     ${(edgePts >= 2 && !LAST_VALUE_CHECK?.gameId) ? `<div class="sub" style="margin-top:12px; margin-bottom:0;">Sem jogo agendado entre estas equipas ainda — não dá para ligar a aposta a um jogo para conferência automática.</div>` : ''}
     <div class="note">Nota: as odds das casas já têm margem embutida (tipicamente 5-8% acima de 100% somando os dois lados) — uma diferença pequena (0-2 pts) é normalmente ruído, não vantagem real.</div>
   `;
+  updateBetSlip(edgePts >= 2 && !!LAST_VALUE_CHECK?.gameId, label, edgePts, odd);
+}
+
+function updateBetSlip(show, label, edgePts, odd){
+  const slip = document.getElementById('betSlipFab');
+  if(!slip) return;
+  if(!show){ slip.classList.remove('show'); return; }
+  document.getElementById('betSlipText').textContent = `${label} @ ${odd} · +${edgePts.toFixed(1)}pts`;
+  slip.classList.add('show');
+}
+
+function openBetSlip(){
+  sendValueCheckToBetForm();
+  document.getElementById('betSlipFab').classList.remove('show');
 }
 
 function trendCard(label, record){
