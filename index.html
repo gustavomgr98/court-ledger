@@ -2845,9 +2845,11 @@ async function renderDailyPicks(){
     if(rHome==null || rAway==null) continue;
     let diff = rHome - rAway + homeAdv;
     const tags = ['casa'];
-    const [{data: lastHome}, {data: lastAway}] = await Promise.all([
+    const [{data: lastHome}, {data: lastAway}, {data: formHomeArr}, {data: formAwayArr}] = await Promise.all([
       sb.rpc('team_last_game_before', {p_team: g.home_team, p_date: g.game_date}),
       sb.rpc('team_last_game_before', {p_team: g.away_team, p_date: g.game_date}),
+      sb.rpc('get_recent_form_weighted', {p_team: g.home_team, p_n: 10}),
+      sb.rpc('get_recent_form_weighted', {p_team: g.away_team, p_n: 10}),
     ]);
     const restHome = lastHome?.[0]?.rest_days ?? null;
     const restAway = lastAway?.[0]?.rest_days ?? null;
@@ -2857,26 +2859,51 @@ async function renderDailyPicks(){
     const pHome = 1/(1+Math.pow(10, -diff/12));
     const favTeam = pHome>=0.5 ? g.home_team : g.away_team;
     const favPct = Math.max(pHome, 1-pHome);
-    picks.push({g, favTeam, favPct, tags});
+
+    const formHome = formHomeArr?.[0], formAway = formAwayArr?.[0];
+    let projTotal = null, projMargin = null;
+    if(formHome?.weighted_avg_scored!=null && formAway?.weighted_avg_scored!=null){
+      const expHome = (formHome.weighted_avg_scored + formAway.weighted_avg_allowed) / 2;
+      const expAway = (formAway.weighted_avg_scored + formHome.weighted_avg_allowed) / 2;
+      projTotal = expHome + expAway;
+      projMargin = expHome - expAway; // positivo = casa favorita no marcador
+    }
+    picks.push({g, favTeam, favPct, tags, projTotal, projMargin});
   }
 
-  picks.sort((x,y)=> y.favPct - x.favPct);
-  const top = picks.slice(0,4);
-  if(!top.length){ wrap.innerHTML = ''; return; }
+  const withVencedor = picks.slice().sort((x,y)=> y.favPct - x.favPct);
+  const topVencedor = withVencedor.slice(0,4);
+  const withTotal = picks.filter(p=>p.projTotal!=null);
+  const highestTotal = withTotal.length ? withTotal.reduce((a,b)=> b.projTotal>a.projTotal?b:a) : null;
+  const closestGame = withTotal.length ? withTotal.reduce((a,b)=> Math.abs(b.projMargin)<Math.abs(a.projMargin)?b:a) : null;
+  const biggestBlowout = withTotal.length ? withTotal.reduce((a,b)=> Math.abs(b.projMargin)>Math.abs(a.projMargin)?b:a) : null;
+
+  if(!topVencedor.length){ wrap.innerHTML = ''; return; }
 
   const dateLabel = fmtGameDate(targetDate);
+  const pickRow = (matchupHtml, tagText, valueHtml, g) => `
+    <div class="daily-pick-row" onclick="openComparisonFromGame('${g.away_team}','${g.home_team}')">
+      <div>
+        <div class="daily-pick-matchup">${matchupHtml}</div>
+        <div class="daily-pick-tag">${tagText}</div>
+      </div>
+      <div class="daily-pick-pct">${valueHtml}</div>
+    </div>`;
+
   wrap.innerHTML = `<div class="daily-picks-card">
     <div class="daily-picks-title">🏆 Destaques do Dia — ${dateLabel}</div>
-    <div class="daily-picks-sub">As favoritas mais claras do modelo entre os jogos agendados — convicção do modelo, não uma deteção de valor real (isso exige odds reais que não temos).</div>
-    ${top.map(p => `
-      <div class="daily-pick-row" onclick="openComparisonFromGame('${p.g.away_team}','${p.g.home_team}')">
-        <div>
-          <div class="daily-pick-matchup">${teamPill(p.g.away_team)} @ ${teamPill(p.g.home_team)}</div>
-          <div class="daily-pick-tag">${p.tags.filter(t=>t!=='casa').join(', ') || 'sem fatores extra'}</div>
-        </div>
-        <div class="daily-pick-pct">${teamPill(p.favTeam)} ${(p.favPct*100).toFixed(0)}%</div>
-      </div>
-    `).join('')}
+    <div class="daily-picks-sub">Convicção do modelo entre os jogos agendados — não uma deteção de valor real (isso exige odds reais que não temos).</div>
+    <div class="sw-title" style="margin-top:2px;">Favoritas mais claras (Vencedor)</div>
+    ${topVencedor.map(p => pickRow(
+      `${teamPill(p.g.away_team)} @ ${teamPill(p.g.home_team)}`,
+      p.tags.filter(t=>t!=='casa').join(', ') || 'sem fatores extra',
+      `${teamPill(p.favTeam)} ${(p.favPct*100).toFixed(0)}%`,
+      p.g
+    )).join('')}
+    ${(highestTotal||closestGame||biggestBlowout) ? `<div class="sw-title" style="margin-top:12px;">Outros mercados</div>` : ''}
+    ${highestTotal ? pickRow(`${teamPill(highestTotal.g.away_team)} @ ${teamPill(highestTotal.g.home_team)}`, 'Total mais alto esperado do dia', `${highestTotal.projTotal.toFixed(1)} pts`, highestTotal.g) : ''}
+    ${closestGame ? pickRow(`${teamPill(closestGame.g.away_team)} @ ${teamPill(closestGame.g.home_team)}`, 'Jogo mais equilibrado do dia', `${closestGame.projMargin>0?'+':''}${closestGame.projMargin.toFixed(1)}`, closestGame.g) : ''}
+    ${biggestBlowout && biggestBlowout.g.id !== closestGame?.g.id ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Maior favoritismo esperado (handicap)', `${biggestBlowout.projMargin>0?'+':''}${biggestBlowout.projMargin.toFixed(1)}`, biggestBlowout.g) : ''}
   </div>`;
 }
 
