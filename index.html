@@ -2853,13 +2853,19 @@ async function renderDailyPicks(){
   const gamesToday = scheduled.filter(g => g.game_date === targetDate);
   if(!gamesToday.length){ wrap.innerHTML = ''; return; }
 
-  const [{data: ratings}, {data: homeAdvArr}, {data: b2bArr}] = await Promise.all([
+  const [{data: ratings}, {data: homeAdvArr}, {data: b2bArr}, {data: varArr}] = await Promise.all([
     sb.rpc('get_team_blended_ratings'),
     sb.rpc('get_home_advantage'),
     sb.rpc('get_b2b_penalty'),
+    sb.rpc('get_scoring_variance'),
   ]);
   const homeAdv = homeAdvArr?.[0]?.avg_margin || 1.5;
   const b2bPenalty = b2bArr?.[0]?.penalty || 1.5;
+  const variance = varArr?.[0];
+  // media real da liga (nao a projecao do proprio jogo) - referencia externa, para dar
+  // confianca genuina ao Total (em vez de comparar cada jogo com a sua propria projecao,
+  // que dava sempre ~50%)
+  const leagueAvgTotal = (ratings?.length) ? (ratings.reduce((s,r)=>s+Number(r.avg_pts),0)/ratings.length)*2 : null;
   const ratingByTeam = {};
   const ratingRowByTeam = {};
   (ratings||[]).forEach(r => { ratingByTeam[r.team_code] = r.rating; ratingRowByTeam[r.team_code] = r; });
@@ -2886,18 +2892,24 @@ async function renderDailyPicks(){
     const favPct = Math.max(pHome, 1-pHome);
 
     const formHome = formHomeArr?.[0], formAway = formAwayArr?.[0];
-    let projTotal = null, projMargin = null;
+    let projTotal = null, projMargin = null, totalLeg = null;
     if(formHome?.weighted_avg_scored!=null && formAway?.weighted_avg_scored!=null){
       const expHome = (formHome.weighted_avg_scored + formAway.weighted_avg_allowed) / 2;
       const expAway = (formAway.weighted_avg_scored + formHome.weighted_avg_allowed) / 2;
       projTotal = expHome + expAway;
       projMargin = expHome - expAway; // positivo = casa favorita no marcador
+      if(leagueAvgTotal!=null && variance?.sd_total){
+        const probOverLeagueAvg = 1 - normalCdf(leagueAvgTotal, projTotal, variance.sd_total);
+        const side = probOverLeagueAvg>=0.5 ? 'over' : 'under';
+        const legProb = Math.max(probOverLeagueAvg, 1-probOverLeagueAvg);
+        totalLeg = { type:'total', label: `${side==='over'?'Over':'Under'} ${leagueAvgTotal.toFixed(1)} (média da liga)`, favPct: legProb, g };
+      }
     }
     const favIsHome = favTeam === g.home_team;
     const rFav = favIsHome ? ratingRowByTeam[g.home_team] : ratingRowByTeam[g.away_team];
     const rUnd = favIsHome ? ratingRowByTeam[g.away_team] : ratingRowByTeam[g.home_team];
     const reasons = topReasonsForPick(rFav, rUnd, favTeam, tags, favIsHome);
-    picks.push({g, favTeam, favPct, tags, projTotal, projMargin, reasons});
+    picks.push({g, favTeam, favPct, tags, projTotal, projMargin, reasons, totalLeg});
   }
 
   const withVencedor = picks.slice().sort((x,y)=> y.favPct - x.favPct);
@@ -2938,33 +2950,44 @@ async function renderDailyPicks(){
     ${highestTotal ? pickRow(`${teamPill(highestTotal.g.away_team)} @ ${teamPill(highestTotal.g.home_team)}`, 'Total mais alto esperado do dia', `${highestTotal.projTotal.toFixed(1)} pts`, highestTotal.g) : ''}
     ${closestGame ? pickRow(`${teamPill(closestGame.g.away_team)} @ ${teamPill(closestGame.g.home_team)}`, 'Jogo mais equilibrado do dia (handicap quase 0)', `${teamPill(closestGame.projMargin>=0?closestGame.g.home_team:closestGame.g.away_team)} ${closestGame.projMargin>=0?'+':''}${closestGame.projMargin.toFixed(1)} pts`, closestGame.g) : ''}
     ${biggestBlowout && biggestBlowout.g.id !== closestGame?.g.id ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Maior favoritismo esperado (handicap)', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g) : ''}
-    ${renderComboSuggestions(withVencedor)}
+    ${renderComboSuggestions(picks)}
   </div>`;
 }
 
-function renderComboSuggestions(sortedPicks){
-  if(sortedPicks.length < 2) return '';
+function renderComboSuggestions(picks){
+  // para cada jogo, escolhe a perna mais confiante entre Vencedor e Total (so uma por jogo,
+  // para as pernas de uma combinada virem sempre de jogos diferentes e ficarem independentes)
+  const pool = picks.map(p => {
+    const vLeg = { label: p.favTeam, matchup: `${p.g.away_team} @ ${p.g.home_team}`, favPct: p.favPct, g: p.g };
+    if(p.totalLeg && p.totalLeg.favPct > vLeg.favPct){
+      return { label: p.totalLeg.label, matchup: `${p.g.away_team} @ ${p.g.home_team}`, favPct: p.totalLeg.favPct, g: p.g };
+    }
+    return vLeg;
+  });
+  pool.sort((a,b)=> b.favPct - a.favPct);
+  if(pool.length < 2) return '';
+
   const buildCombo = (n)=>{
-    const legs = sortedPicks.slice(0, n);
+    const legs = pool.slice(0, n);
     const combinedProb = legs.reduce((p, l)=> p*l.favPct, 1);
     const combinedOdd = 1/combinedProb;
     return { legs, combinedProb, combinedOdd };
   };
   const dupla = buildCombo(2);
-  const tripla = sortedPicks.length >= 3 ? buildCombo(3) : null;
+  const tripla = pool.length >= 3 ? buildCombo(3) : null;
 
   const comboBlock = (combo, title)=> `
     <div class="context-card" style="margin-top:8px;">
       <div class="cc-team">${title}</div>
-      ${combo.legs.map(l => `<div class="cc-row"><span class="cc-label">${l.g.away_team} @ ${l.g.home_team}</span><span class="cc-val">${teamPill(l.favTeam)} ${(l.favPct*100).toFixed(0)}%</span></div>`).join('')}
+      ${combo.legs.map(l => `<div class="cc-row"><span class="cc-label">${l.matchup} — ${l.label}</span><span class="cc-val">${(l.favPct*100).toFixed(0)}%</span></div>`).join('')}
       <div class="cc-row" style="border-bottom:none;"><span class="cc-label"><b>Combinada</b></span><span class="cc-val"><b>${(combo.combinedProb*100).toFixed(1)}% · odd justa ${combo.combinedOdd.toFixed(2)}</b></span></div>
     </div>`;
 
   return `
-    <div class="sw-title" style="margin-top:14px;">Apostas combinadas (a partir das favoritas acima)</div>
-    <div class="sub" style="margin-bottom:0;">⚠️ Combinar <b>multiplica o risco</b> — só ganhas se <b>todas</b> as pernas acertarem. Assume que os jogos são independentes entre si (equipas diferentes, sem ligação). Não é "mais garantido", é maior risco por maior retorno potencial.</div>
-    ${comboBlock(dupla, `Dupla (${dupla.legs.map(l=>l.favTeam).join(' + ')})`)}
-    ${tripla ? comboBlock(tripla, `Tripla (${tripla.legs.map(l=>l.favTeam).join(' + ')})`) : ''}
+    <div class="sw-title" style="margin-top:14px;">Apostas combinadas (Vencedor + Total, a perna mais confiante de cada jogo)</div>
+    <div class="sub" style="margin-bottom:0;">⚠️ Combinar <b>multiplica o risco</b> — só ganhas se <b>todas</b> as pernas acertarem. Cada jogo entra só uma vez, para as pernas ficarem independentes entre si. Não é "mais garantido", é maior risco por maior retorno potencial.</div>
+    ${comboBlock(dupla, `Dupla`)}
+    ${tripla ? comboBlock(tripla, `Tripla`) : ''}
   `;
 }
 
