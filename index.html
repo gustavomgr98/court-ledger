@@ -324,6 +324,21 @@
   }
   /* Contagem decrescente para o inicio da epoca */
   #seasonCountdown{padding:16px 20px 4px;}
+  #dailyPicksWrap{padding:0 20px 4px;}
+  .daily-picks-card{
+    background:linear-gradient(135deg, rgba(240,187,62,0.08), rgba(255,122,61,0.04));
+    border:1px solid rgba(240,187,62,0.3); border-radius:10px; padding:14px 16px;
+  }
+  .daily-picks-title{font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; color:var(--gold); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:2px;}
+  .daily-picks-sub{font-size:11px; color:var(--ink-dim); margin-bottom:10px;}
+  .daily-pick-row{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0;
+    border-top:1px solid var(--line-soft); cursor:pointer;
+  }
+  .daily-pick-row:first-of-type{border-top:none;}
+  .daily-pick-matchup{font-size:13px; font-weight:500;}
+  .daily-pick-tag{font-size:10.5px; color:var(--ink-dim); font-family:'Roboto Mono',monospace;}
+  .daily-pick-pct{font-family:'Oswald',sans-serif; font-weight:700; font-size:17px; color:var(--gold); white-space:nowrap;}
   .countdown-card{
     position:relative; overflow:hidden; border-radius:12px; padding:16px 18px 14px;
     background:linear-gradient(160deg, #12233F, #0A1420 75%);
@@ -503,6 +518,7 @@
   <div id="seasonCountdown"></div>
   <div id="staleDataBanner" style="display:none;"></div>
   <div id="upcomingTicker"></div>
+  <div id="dailyPicksWrap"></div>
 
   <div class="wrap">
     <nav>
@@ -2681,6 +2697,7 @@ async function loadCalendar(){
   ALL_GAMES = data || [];
   renderCalendar();
   renderUpcomingTicker();
+  renderDailyPicks();
 }
 
 function setupTickerDrag(){
@@ -2799,6 +2816,68 @@ function updateSeasonCountdown(){
   document.getElementById('countdownMin').textContent = pad(m);
   document.getElementById('countdownSec').textContent = pad(s);
   document.getElementById('countdownProgressFill').style.width = pct + '%';
+}
+
+async function renderDailyPicks(){
+  const wrap = document.getElementById('dailyPicksWrap');
+  if(!wrap) return;
+  const today = new Date().toISOString().slice(0,10);
+  const scheduled = ALL_GAMES.filter(g => g.status === 'scheduled' && g.game_date >= today);
+  if(!scheduled.length){ wrap.innerHTML = ''; return; }
+
+  const targetDate = scheduled[0].game_date; // primeiro dia com jogos agendados (hoje, ou o proximo)
+  const gamesToday = scheduled.filter(g => g.game_date === targetDate);
+  if(!gamesToday.length){ wrap.innerHTML = ''; return; }
+
+  const [{data: ratings}, {data: homeAdvArr}, {data: b2bArr}] = await Promise.all([
+    sb.rpc('get_team_blended_ratings'),
+    sb.rpc('get_home_advantage'),
+    sb.rpc('get_b2b_penalty'),
+  ]);
+  const homeAdv = homeAdvArr?.[0]?.avg_margin || 1.5;
+  const b2bPenalty = b2bArr?.[0]?.penalty || 1.5;
+  const ratingByTeam = {};
+  (ratings||[]).forEach(r => ratingByTeam[r.team_code] = r.rating);
+
+  const picks = [];
+  for(const g of gamesToday){
+    const rHome = ratingByTeam[g.home_team], rAway = ratingByTeam[g.away_team];
+    if(rHome==null || rAway==null) continue;
+    let diff = rHome - rAway + homeAdv;
+    const tags = ['casa'];
+    const [{data: lastHome}, {data: lastAway}] = await Promise.all([
+      sb.rpc('team_last_game_before', {p_team: g.home_team, p_date: g.game_date}),
+      sb.rpc('team_last_game_before', {p_team: g.away_team, p_date: g.game_date}),
+    ]);
+    const restHome = lastHome?.[0]?.rest_days ?? null;
+    const restAway = lastAway?.[0]?.rest_days ?? null;
+    if(restHome!=null && restHome<=1){ diff -= b2bPenalty; tags.push(`${g.home_team} em back-to-back`); }
+    if(restAway!=null && restAway<=1){ diff += b2bPenalty; tags.push(`${g.away_team} em back-to-back`); }
+
+    const pHome = 1/(1+Math.pow(10, -diff/12));
+    const favTeam = pHome>=0.5 ? g.home_team : g.away_team;
+    const favPct = Math.max(pHome, 1-pHome);
+    picks.push({g, favTeam, favPct, tags});
+  }
+
+  picks.sort((x,y)=> y.favPct - x.favPct);
+  const top = picks.slice(0,4);
+  if(!top.length){ wrap.innerHTML = ''; return; }
+
+  const dateLabel = fmtGameDate(targetDate);
+  wrap.innerHTML = `<div class="daily-picks-card">
+    <div class="daily-picks-title">🏆 Destaques do Dia — ${dateLabel}</div>
+    <div class="daily-picks-sub">As favoritas mais claras do modelo entre os jogos agendados — convicção do modelo, não uma deteção de valor real (isso exige odds reais que não temos).</div>
+    ${top.map(p => `
+      <div class="daily-pick-row" onclick="openComparisonFromGame('${p.g.away_team}','${p.g.home_team}')">
+        <div>
+          <div class="daily-pick-matchup">${teamPill(p.g.away_team)} @ ${teamPill(p.g.home_team)}</div>
+          <div class="daily-pick-tag">${p.tags.filter(t=>t!=='casa').join(', ') || 'sem fatores extra'}</div>
+        </div>
+        <div class="daily-pick-pct">${teamPill(p.favTeam)} ${(p.favPct*100).toFixed(0)}%</div>
+      </div>
+    `).join('')}
+  </div>`;
 }
 
 function renderUpcomingTicker(){
