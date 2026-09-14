@@ -1785,6 +1785,24 @@ function erf(x){
 }
 function normalCdf(x, mean, sd){ return 0.5*(1+erf((x-mean)/(sd*Math.sqrt(2)))); }
 
+// Aproximacao padrao (Acklam) da inversa da distribuicao normal — converte uma probabilidade
+// de volta numa margem esperada, na mesma escala de desvio-padrao real da liga. E' isto que
+// liga o Vencedor (probabilidade) ao Handicap/Total por Equipa (pontos), para nunca mais
+// poderem contradizer-se um ao outro.
+function invNormalCdf(p){
+  if(p<=0) return -Infinity; if(p>=1) return Infinity;
+  const a=[-3.969683028665376e+01,2.209460984245205e+02,-2.759285104469687e+02,1.383577518672690e+02,-3.066479806614716e+01,2.506628277459239e+00];
+  const b=[-5.447609879822406e+01,1.615858368580409e+02,-1.556989798598866e+02,6.680131188771972e+01,-1.328068155288572e+01];
+  const c=[-7.784894002430293e-03,-3.223964580411365e-01,-2.400758277161838e+00,-2.549732539343734e+00,4.374664141464968e+00,2.938163982698783e+00];
+  const d=[7.784695709041462e-03,3.224671290700398e-01,2.445134137142996e+00,3.754408661907416e+00];
+  const plow=0.02425, phigh=1-plow;
+  let q, r;
+  if(p<plow){ q=Math.sqrt(-2*Math.log(p)); return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  if(p>phigh){ q=Math.sqrt(-2*Math.log(1-p)); return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  q=p-0.5; r=q*q;
+  return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+
 async function renderMarketGrid(){
   const wrap = document.getElementById('marketGridWrap');
   if(!wrap) return;
@@ -1804,8 +1822,13 @@ async function renderMarketGrid(){
   });
 
   if(v && v.n_games && LAST_FORM?.a && LAST_FORM?.b){
-    const expA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
-    const expB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+    const rawExpA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
+    const rawExpB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+    const projTotal0 = rawExpA + rawExpB;
+    // margem consistente com o Vencedor (ver nota em computeCurrentModelProb)
+    const margin = invNormalCdf(pA) * v.sd_margin;
+    const expA = (projTotal0 + margin) / 2;
+    const expB = (projTotal0 - margin) / 2;
     const projTotal = expA + expB;
     const line = Math.round(projTotal*2)/2; // arredonda a 0.5 mais proximo, como uma casa real faria
     const probOver = 1 - normalCdf(line, projTotal, v.sd_total);
@@ -1815,7 +1838,6 @@ async function renderMarketGrid(){
       right: {name: 'Under', odd: oddFor(1-probOver)},
     });
 
-    const margin = expA - expB; // positivo = A favorita
     const handicapLine = Math.round(margin*2)/2;
     const probACover = 1 - normalCdf(-handicapLine, margin, v.sd_margin);
     rows.push({
@@ -1865,8 +1887,15 @@ async function computeCurrentModelProb(){
   const v = varData?.[0];
   if(!v || !v.n_games) return null;
   if(!LAST_FORM || !LAST_FORM.a || !LAST_FORM.b) return null;
-  const expA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
-  const expB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+  const rawExpA = (LAST_FORM.a.weighted_avg_scored + LAST_FORM.b.weighted_avg_allowed) / 2;
+  const rawExpB = (LAST_FORM.b.weighted_avg_scored + LAST_FORM.a.weighted_avg_allowed) / 2;
+  // a margem vem da MESMA probabilidade de vitoria do Vencedor (nao da forma recente sozinha),
+  // para o Handicap/Total por Equipa nunca poderem contradizer quem esta favorito a ganhar —
+  // a forma recente so decide o nivel geral de pontuacao (o total), nao quem fica a frente.
+  const projTotal0 = rawExpA + rawExpB;
+  const consistentMargin = invNormalCdf(LAST_WINPROB.pA) * v.sd_margin;
+  const expA = (projTotal0 + consistentMargin) / 2;
+  const expB = (projTotal0 - consistentMargin) / 2;
 
   if(mkt === 'total'){
     const line = parseFloat(document.getElementById('valueLineInput').value);
@@ -2853,12 +2882,14 @@ async function renderDailyPicks(){
   const gamesToday = scheduled.filter(g => g.game_date === targetDate);
   if(!gamesToday.length){ wrap.innerHTML = ''; return; }
 
-  const [{data: ratings}, {data: homeAdvArr}, {data: b2bArr}] = await Promise.all([
+  const [{data: ratings}, {data: homeAdvArr}, {data: b2bArr}, {data: varArr}] = await Promise.all([
     sb.rpc('get_team_blended_ratings'),
     sb.rpc('get_home_advantage'),
     sb.rpc('get_b2b_penalty'),
+    sb.rpc('get_scoring_variance'),
   ]);
   const homeAdv = homeAdvArr?.[0]?.avg_margin || 1.5;
+  const sdMargin = varArr?.[0]?.sd_margin || 12;
   const b2bPenalty = b2bArr?.[0]?.penalty || 1.5;
   const ratingByTeam = {};
   const ratingRowByTeam = {};
@@ -2888,10 +2919,14 @@ async function renderDailyPicks(){
     const formHome = formHomeArr?.[0], formAway = formAwayArr?.[0];
     let projTotal = null, projMargin = null, expHome = null, expAway = null;
     if(formHome?.weighted_avg_scored!=null && formAway?.weighted_avg_scored!=null){
-      expHome = (formHome.weighted_avg_scored + formAway.weighted_avg_allowed) / 2;
-      expAway = (formAway.weighted_avg_scored + formHome.weighted_avg_allowed) / 2;
-      projTotal = expHome + expAway;
-      projMargin = expHome - expAway; // positivo = casa favorita no marcador
+      const rawHome = (formHome.weighted_avg_scored + formAway.weighted_avg_allowed) / 2;
+      const rawAway = (formAway.weighted_avg_scored + formHome.weighted_avg_allowed) / 2;
+      projTotal = rawHome + rawAway;
+      // margem consistente com o Vencedor (pHome, calculado logo acima) — nunca mais pode
+      // dizer que a equipa favorita marca menos do que a adversaria
+      projMargin = invNormalCdf(pHome) * sdMargin;
+      expHome = (projTotal + projMargin) / 2;
+      expAway = (projTotal - projMargin) / 2;
     }
     const favIsHome = favTeam === g.home_team;
     const rFav = favIsHome ? ratingRowByTeam[g.home_team] : ratingRowByTeam[g.away_team];
