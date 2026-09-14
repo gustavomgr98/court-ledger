@@ -1422,6 +1422,7 @@ let LAST_MATCHUP_CONTEXT = null;
 let LAST_TRENDS = null;
 let LAST_TRANSFERS = null;
 let LAST_FORM = null;
+let LAST_SD_MARGIN = null;
 let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
 let LAST_ROSTER_RAW = {A: [], B: []};
@@ -1696,17 +1697,19 @@ async function renderFormAndHistory(){
   h2hWrap.innerHTML = '';
   if(motivGrid) motivGrid.innerHTML = '';
 
-  const [formA, formB, splitA, splitB, h2h, motivA, motivB] = await Promise.all([
+  const [formA, formB, splitA, splitB, h2h, motivA, motivB, varRes] = await Promise.all([
     sb.rpc('get_recent_form_weighted', {p_team: a, p_n: 10}),
     sb.rpc('get_recent_form_weighted', {p_team: b, p_n: 10}),
     sb.rpc('get_home_away_split', {p_team: a}),
     sb.rpc('get_home_away_split', {p_team: b}),
     sb.rpc('get_head_to_head', {p_team_a: a, p_team_b: b, p_n: 5}),
     sb.rpc('get_motivation_context', {p_team: a}),
-    sb.rpc('get_motivation_context', {p_team: b})
+    sb.rpc('get_motivation_context', {p_team: b}),
+    sb.rpc('get_scoring_variance'),
   ]);
 
   LAST_FORM = { a: formA.data?.[0] || null, b: formB.data?.[0] || null };
+  LAST_SD_MARGIN = varRes.data?.[0]?.sd_margin || null;
 
   formGrid.innerHTML = [[a, formA.data?.[0]], [b, formB.data?.[0]]].map(([team, f])=>{
     if(!f || (f.wins+f.losses)===0) return `<div class="context-card"><div class="cc-team">${team}</div><div class="empty">Sem jogos terminados ainda.</div></div>`;
@@ -2523,12 +2526,21 @@ function renderMarketSummary(a, b, formA, formB, splitA, splitB){
     });
   }
 
-  // Total de pontos e handicap — a partir da forma recente PONDERADA (ataque/defesa reais, jogos recentes pesam mais)
+  // Total de pontos e handicap — nivel geral de pontuacao vem da forma recente, mas quem fica
+  // a frente (a margem) vem SEMPRE da mesma probabilidade do Vencedor acima, para os dois
+  // cartoes nunca poderem contradizer-se entre si.
   if(hasForm){
-    const expA = (formA.weighted_avg_scored + formB.weighted_avg_allowed) / 2;
-    const expB = (formB.weighted_avg_scored + formA.weighted_avg_allowed) / 2;
+    const rawA = (formA.weighted_avg_scored + formB.weighted_avg_allowed) / 2;
+    const rawB = (formB.weighted_avg_scored + formA.weighted_avg_allowed) / 2;
+    const total0 = rawA + rawB;
+    let margin = rawA - rawB; // recuo, caso nao haja LAST_WINPROB disponivel por algum motivo
+    if(LAST_WINPROB && LAST_WINPROB.a===a && LAST_WINPROB.b===b){
+      const sdMargin = LAST_SD_MARGIN || 12;
+      margin = invNormalCdf(LAST_WINPROB.pA) * sdMargin;
+    }
+    const expA = (total0 + margin) / 2;
+    const expB = (total0 - margin) / 2;
     const total = expA + expB;
-    const margin = expA - expB;
     const totalLine = (Math.round(total*2)/2).toFixed(1);
 
     cards.push({
