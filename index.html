@@ -2930,12 +2930,12 @@ async function renderDailyPicks(){
   const wrap = document.getElementById('dailyPicksWrap');
   if(!wrap) return;
 
-  // guarda o que ja estiver escrito nos campos de odd/linha antes de reconstruir a seccao,
-  // para nao apagar o que a pessoa esta a meter enquanto a app atualiza os placares sozinha
-  const savedInputs = {};
-  wrap.querySelectorAll('input[id^="dpLine"], input[id^="dpOdd"]').forEach(inp=>{
-    if(inp.value) savedInputs[inp.id] = inp.value;
-  });
+  // se a pessoa estiver a escrever num campo de linha/odd desta seccao neste preciso momento,
+  // nao mexe em nada ate ela sair do campo (perder o foco) - so aí volta a atualizar sozinho
+  const active = document.activeElement;
+  if(active && wrap.contains(active) && (active.id.startsWith('dpLine') || active.id.startsWith('dpOdd'))){
+    return;
+  }
 
   const today = new Date().toISOString().slice(0,10);
   const scheduled = ALL_GAMES.filter(g => g.status === 'scheduled' && g.game_date >= today);
@@ -3056,13 +3056,6 @@ async function renderDailyPicks(){
     ${closestGame ? pickRow(`${teamPill(closestGame.g.away_team)} @ ${teamPill(closestGame.g.home_team)}`, 'Jogo mais equilibrado do dia (handicap quase 0)', `${teamPill(closestGame.projMargin>=0?closestGame.g.home_team:closestGame.g.away_team)} ${closestGame.projMargin>=0?'+':''}${closestGame.projMargin.toFixed(1)} pts`, closestGame.g, {id:`close-${closestGame.g.id}`, mean:Math.abs(closestGame.projMargin), sd:sdMargin, side:'cover'}) : ''}
     ${biggestBlowout && biggestBlowout.g.id !== closestGame?.g.id ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Maior favoritismo esperado (handicap)', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
   </div>`;
-
-  // restaura o que estava escrito antes de atualizar, e volta a calcular o veredito para cada campo
-  Object.keys(savedInputs).forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.value = savedInputs[id];
-  });
-  wrap.querySelectorAll('input[id^="dpOdd"]').forEach(inp=>{ if(inp.value) inp.dispatchEvent(new Event('input')); });
 }
 
 function renderUpcomingTicker(){
