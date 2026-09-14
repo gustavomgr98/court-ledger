@@ -3323,7 +3323,7 @@ async function askKobeAboutDailyPicks(){
   if(mostConfidentTeamScore){
     prompt += `\nTOTAL POR EQUIPA MAIS CONFIANTE: ${mostConfidentTeamScore.team} (${mostConfidentTeamScore.g.away_team} @ ${mostConfidentTeamScore.g.home_team}) — projeção de ${mostConfidentTeamScore.score.toFixed(1)} pontos sozinha, ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)}).\n`;
   }
-  prompt += `\nEscreve 2-3 parágrafos curtos, em tom de analista, explicando o "porquê" de cada destaque — não só repetir os números, mas dar sentido a eles (ex: se for por vantagem de casa apertada, diz isso; se for uma equipa em forma muito acima da média, explica isso).`;
+  prompt += `\nEscreve um parágrafo curto SEPARADO para cada uma das categorias acima (Favoritas do Vencedor, Handicap, Total, Total por Equipa) — não te limites a falar só das favoritas e resumir o resto numa frase. Cada categoria merece a sua própria explicação do "porquê", mesmo que curta. Explica o sentido dos números (ex: vantagem de casa apertada, forma muito acima da média), não os repitas em lista.`;
 
   document.getElementById('kobePanel').classList.add('open');
   document.getElementById('chatInput').value = '';
