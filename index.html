@@ -1423,6 +1423,7 @@ let LAST_TRENDS = null;
 let LAST_TRANSFERS = null;
 let LAST_FORM = null;
 let LAST_SD_MARGIN = null;
+let LAST_DAILY_PICKS = null;
 let LAST_RATINGS = null;
 let LAST_VALUE_MATCHUP = null;
 let LAST_ROSTER_RAW = {A: [], B: []};
@@ -3075,7 +3076,10 @@ async function renderDailyPicks(){
     ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Handicap — margem projetada mais clara do dia', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
     ${mostConfidentTotal ? pickRow(`${teamPill(mostConfidentTotal.g.away_team)} @ ${teamPill(mostConfidentTotal.g.home_team)}`, `Total — ${mostConfidentTotal.z.toFixed(1)} desvios-padrão ${mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal?'acima':'abaixo'} da média real da liga (${mostConfidentTotal.leagueAvgTotal.toFixed(1)})`, `${mostConfidentTotal.projTotal.toFixed(1)} pts`, mostConfidentTotal.g, {id:`total-${mostConfidentTotal.g.id}`, mean:mostConfidentTotal.projTotal, sd:sdTotal, side: mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal ? 'over':'under'}) : ''}
     ${mostConfidentTeamScore ? pickRow(`${teamPill(mostConfidentTeamScore.g.away_team)} @ ${teamPill(mostConfidentTeamScore.g.home_team)}`, `Total por Equipa — ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)})`, `${teamPill(mostConfidentTeamScore.team)} ${mostConfidentTeamScore.score.toFixed(1)} pts`, mostConfidentTeamScore.g, {id:`teamscore-${mostConfidentTeamScore.g.id}`, mean:mostConfidentTeamScore.score, sd:sdTeamScore, side: mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore ? 'over':'under'}) : ''}
+    <button class="ghost" style="margin-top:12px; width:100%;" onclick="askKobeAboutDailyPicks()">💬 Pedir ao Kobe para justificar os Destaques do Dia</button>
   </div>`;
+
+  LAST_DAILY_PICKS = { dateLabel, topVencedor, biggestBlowout, mostConfidentTotal, mostConfidentTeamScore };
 }
 
 function renderUpcomingTicker(){
@@ -3298,6 +3302,56 @@ function toggleVoiceInput(){
     micBtn.style.borderColor = '';
   };
   voiceRecognition.start();
+}
+
+async function askKobeAboutDailyPicks(){
+  if(!LAST_DAILY_PICKS){ alert('Ainda sem destaques calculados.'); return; }
+  const { dateLabel, topVencedor, biggestBlowout, mostConfidentTotal, mostConfidentTeamScore } = LAST_DAILY_PICKS;
+
+  let prompt = `Explica, como um analista a justificar o seu próprio trabalho, porque é que estes são os Destaques do Dia (${dateLabel}) segundo o modelo — não repitas os números em lista, conta o raciocínio:\n\n`;
+  prompt += `FAVORITAS MAIS CLARAS (Vencedor):\n`;
+  topVencedor.forEach(p => {
+    prompt += `- ${p.g.away_team} @ ${p.g.home_team}: ${p.favTeam} favorito a ${(p.favPct*100).toFixed(0)}%. Razões: ${p.reasons?.join(', ') || 'diferença normal de nível + vantagem de casa'}.\n`;
+  });
+  if(biggestBlowout){
+    const favTeam = biggestBlowout.projMargin>=0 ? biggestBlowout.g.home_team : biggestBlowout.g.away_team;
+    prompt += `\nMAIOR FAVORITISMO (Handicap): ${biggestBlowout.g.away_team} @ ${biggestBlowout.g.home_team} — ${favTeam} projetado a ganhar por ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pontos, a margem mais clara do dia.\n`;
+  }
+  if(mostConfidentTotal){
+    prompt += `\nTOTAL MAIS CONFIANTE: ${mostConfidentTotal.g.away_team} @ ${mostConfidentTotal.g.home_team} — projeção de ${mostConfidentTotal.projTotal.toFixed(1)} pontos, ${mostConfidentTotal.z.toFixed(1)} desvios-padrão ${mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal?'acima':'abaixo'} da média real da liga (${mostConfidentTotal.leagueAvgTotal.toFixed(1)}).\n`;
+  }
+  if(mostConfidentTeamScore){
+    prompt += `\nTOTAL POR EQUIPA MAIS CONFIANTE: ${mostConfidentTeamScore.team} (${mostConfidentTeamScore.g.away_team} @ ${mostConfidentTeamScore.g.home_team}) — projeção de ${mostConfidentTeamScore.score.toFixed(1)} pontos sozinha, ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)}).\n`;
+  }
+  prompt += `\nEscreve 2-3 parágrafos curtos, em tom de analista, explicando o "porquê" de cada destaque — não só repetir os números, mas dar sentido a eles (ex: se for por vantagem de casa apertada, diz isso; se for uma equipa em forma muito acima da média, explica isso).`;
+
+  document.getElementById('kobePanel').classList.add('open');
+  document.getElementById('chatInput').value = '';
+  addChatBubble('user', `Justifica os Destaques do Dia (${dateLabel})`);
+  CHAT_HISTORY.push({role:'user', text: prompt});
+  const loadingEl = addChatBubble('bot', 'A analisar…', true);
+
+  try{
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/ai-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY)
+      },
+      body: JSON.stringify({ message: prompt, history: CHAT_HISTORY.slice(0,-1) })
+    });
+    const data = await resp.json();
+    loadingEl.remove();
+    if(data.error){ addChatBubble('bot', 'Erro: ' + data.error); }
+    else{
+      addChatBubble('bot', data.text || '(sem resposta)');
+      CHAT_HISTORY.push({role:'assistant', text: data.text || ''});
+    }
+  } catch(e){
+    loadingEl.remove();
+    addChatBubble('bot', 'Erro de rede: ' + e.message);
+  }
 }
 
 async function askKobeAboutMatchup(){
