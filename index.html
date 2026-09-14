@@ -2953,6 +2953,8 @@ async function renderDailyPicks(){
   ]);
   const homeAdv = homeAdvArr?.[0]?.avg_margin || 1.5;
   const sdMargin = varArr?.[0]?.sd_margin || 12;
+  const sdTotal = varArr?.[0]?.sd_total || 20;
+  const sdTeamScore = varArr?.[0]?.sd_team_score || 13;
   const b2bPenalty = b2bArr?.[0]?.penalty || 1.5;
   const ratingByTeam = {};
   const ratingRowByTeam = {};
@@ -3005,6 +3007,34 @@ async function renderDailyPicks(){
   // aplicada ao Handicap
   const biggestBlowout = withTotal.length ? withTotal.reduce((a,b)=> Math.abs(b.projMargin)>Math.abs(a.projMargin)?b:a) : null;
 
+  // confianca no Total: quanto mais um jogo se desvia da MEDIA REAL DA LIGA (dados ao nivel
+  // de equipa, ja corrigidos - nao a media de pontos por jogador), maior a confianca de que
+  // vai ser um jogo genuinamente acima/abaixo do normal, em desvios-padrao reais.
+  let mostConfidentTotal = null;
+  if(withTotal.length){
+    const leagueAvgTotal = withTotal.reduce((s,p)=>s+p.projTotal,0) / withTotal.length;
+    mostConfidentTotal = withTotal.reduce((best,p)=>{
+      const z = Math.abs(p.projTotal - leagueAvgTotal) / sdTotal;
+      return (!best || z>best.z) ? {...p, z, leagueAvgTotal} : best;
+    }, null);
+  }
+
+  // o mesmo principio para Total por Equipa: cada equipa contribui a sua propria projecao,
+  // comparada com a media real de pontuacao por equipa
+  const teamScoreCandidates = [];
+  withTotal.forEach(p => {
+    if(p.expHome!=null) teamScoreCandidates.push({g: p.g, team: p.g.home_team, score: p.expHome});
+    if(p.expAway!=null) teamScoreCandidates.push({g: p.g, team: p.g.away_team, score: p.expAway});
+  });
+  let mostConfidentTeamScore = null;
+  if(teamScoreCandidates.length){
+    const leagueAvgTeamScore = teamScoreCandidates.reduce((s,c)=>s+c.score,0) / teamScoreCandidates.length;
+    mostConfidentTeamScore = teamScoreCandidates.reduce((best,c)=>{
+      const z = Math.abs(c.score - leagueAvgTeamScore) / sdTeamScore;
+      return (!best || z>best.z) ? {...c, z, leagueAvgTeamScore} : best;
+    }, null);
+  }
+
   if(!topVencedor.length){ wrap.innerHTML = ''; return; }
 
   const dateLabel = fmtGameDate(targetDate);
@@ -3041,8 +3071,10 @@ async function renderDailyPicks(){
         </div>
       </div>
     `).join('')}
-    ${biggestBlowout ? `<div class="sw-title" style="margin-top:12px;">Mais confiantes noutros mercados (Handicap)</div>` : ''}
-    ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Maior favoritismo esperado — margem projetada mais clara do dia', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
+    ${biggestBlowout ? `<div class="sw-title" style="margin-top:12px;">Mais confiantes noutros mercados</div>` : ''}
+    ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Handicap — margem projetada mais clara do dia', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
+    ${mostConfidentTotal ? pickRow(`${teamPill(mostConfidentTotal.g.away_team)} @ ${teamPill(mostConfidentTotal.g.home_team)}`, `Total — ${mostConfidentTotal.z.toFixed(1)} desvios-padrão ${mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal?'acima':'abaixo'} da média real da liga (${mostConfidentTotal.leagueAvgTotal.toFixed(1)})`, `${mostConfidentTotal.projTotal.toFixed(1)} pts`, mostConfidentTotal.g, {id:`total-${mostConfidentTotal.g.id}`, mean:mostConfidentTotal.projTotal, sd:sdTotal, side: mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal ? 'over':'under'}) : ''}
+    ${mostConfidentTeamScore ? pickRow(`${teamPill(mostConfidentTeamScore.g.away_team)} @ ${teamPill(mostConfidentTeamScore.g.home_team)}`, `Total por Equipa — ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)})`, `${teamPill(mostConfidentTeamScore.team)} ${mostConfidentTeamScore.score.toFixed(1)} pts`, mostConfidentTeamScore.g, {id:`teamscore-${mostConfidentTeamScore.g.id}`, mean:mostConfidentTeamScore.score, sd:sdTeamScore, side: mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore ? 'over':'under'}) : ''}
   </div>`;
 }
 
