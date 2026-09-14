@@ -1,72 +1,47 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#16294A"/>
-      <stop offset="1" stop-color="#0C1930"/>
+    <linearGradient id="bgBlue" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#2A4A78"/>
+      <stop offset="45%" stop-color="#14283F"/>
+      <stop offset="100%" stop-color="#080F18"/>
     </linearGradient>
-    <linearGradient id="ball" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FF7D42"/>
-      <stop offset="1" stop-color="#E85A1C"/>
+    <radialGradient id="bgGlow" cx="24%" cy="14%" r="70%">
+      <stop offset="0%" stop-color="#4E7BB8" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#4E7BB8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="60%" r="75%">
+      <stop offset="60%" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.3"/>
+    </radialGradient>
+    <linearGradient id="ledgerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF9558"/>
+      <stop offset="100%" stop-color="#FF6B2C"/>
     </linearGradient>
-    <clipPath id="roundedSquare">
-      <rect x="0" y="0" width="512" height="512" rx="112"/>
-    </clipPath>
+    <filter id="textShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="lineShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#FF7A3D" flood-opacity="0.5"/>
+    </filter>
   </defs>
 
-  <g clip-path="url(#roundedSquare)">
-    <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#bgBlue)"/>
+  <rect width="512" height="512" rx="112" fill="url(#bgGlow)"/>
 
-    <!-- backboard glow line -->
-    <rect x="0" y="118" width="512" height="6" fill="#22345A"/>
+  <path d="M-20 300 Q256 220 532 300" fill="none" stroke="#FFFFFF" stroke-width="2.5" opacity="0.07"/>
+  <path d="M-20 340 Q256 260 532 340" fill="none" stroke="#FFFFFF" stroke-width="2.5" opacity="0.06"/>
 
-    <!-- rim (behind ball on left side, in front on right, to suggest depth) -->
-    <g>
-      <!-- net -->
-      <g stroke="#5FE0D0" stroke-width="4" opacity="0.85" fill="none">
-        <line x1="150" y1="150" x2="168" y2="252"/>
-        <line x1="196" y1="146" x2="204" y2="252"/>
-        <line x1="244" y1="144" x2="240" y2="252"/>
-        <line x1="292" y1="144" x2="278" y2="252"/>
-        <line x1="340" y1="146" x2="316" y2="252"/>
-        <line x1="386" y1="150" x2="352" y2="252"/>
-        <path d="M168 200 L204 198" />
-        <path d="M204 198 L240 197" />
-        <path d="M240 197 L278 197" />
-        <path d="M278 197 L316 198" />
-        <path d="M316 198 L352 200" />
-        <path d="M168 252 L204 252" />
-        <path d="M204 252 L240 252" />
-        <path d="M240 252 L278 252" />
-        <path d="M278 252 L316 252" />
-        <path d="M316 252 L352 252" />
-      </g>
-      <!-- rim ring -->
-      <ellipse cx="256" cy="150" rx="140" ry="26" fill="none" stroke="#FF6A28" stroke-width="14"/>
-      <ellipse cx="256" cy="150" rx="140" ry="26" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.25"/>
-    </g>
+  <rect x="34" y="34" width="444" height="444" rx="88" fill="none" stroke="#FFFFFF" stroke-width="1.5" opacity="0.12"/>
 
-    <!-- basketball, mid-drop through the rim -->
-    <g transform="translate(256 318)">
-      <circle r="118" fill="url(#ball)"/>
-      <g stroke="#0C1930" stroke-width="7" fill="none" opacity="0.55">
-        <line x1="0" y1="-118" x2="0" y2="118"/>
-        <line x1="-118" y1="0" x2="118" y2="0"/>
-        <path d="M -118 0 A 118 118 0 0 1 0 -118"/>
-        <path d="M 0 -118 A 118 118 0 0 1 118 0"/>
-        <path d="M 118 0 A 118 118 0 0 1 0 118"/>
-        <path d="M 0 118 A 118 118 0 0 1 -118 0"/>
-      </g>
-      <ellipse cx="-42" cy="-48" rx="34" ry="20" fill="#FFFFFF" opacity="0.18"/>
-    </g>
+  <text x="256" y="248" text-anchor="middle" font-family="Oswald, 'Helvetica Neue', Arial, sans-serif" font-weight="600"
+    font-size="80" letter-spacing="6" fill="#F5F7FA" filter="url(#textShadow)">COURT</text>
+  <text x="256" y="336" text-anchor="middle" font-family="Oswald, 'Helvetica Neue', Arial, sans-serif" font-weight="700"
+    font-size="86" letter-spacing="3" fill="url(#ledgerGrad)" filter="url(#textShadow)">LEDGER</text>
 
-    <!-- motion lines -->
-    <g stroke="#31D6C4" stroke-width="8" stroke-linecap="round" opacity="0.5">
-      <line x1="108" y1="230" x2="108" y2="272"/>
-      <line x1="88" y1="250" x2="88" y2="282"/>
-    </g>
-    <g stroke="#31D6C4" stroke-width="8" stroke-linecap="round" opacity="0.5">
-      <line x1="404" y1="230" x2="404" y2="272"/>
-      <line x1="424" y1="250" x2="424" y2="282"/>
-    </g>
+  <g filter="url(#lineShadow)">
+    <rect x="150" y="368" width="70" height="4" rx="2" fill="#FF7A3D"/>
+    <rect x="292" y="368" width="70" height="4" rx="2" fill="#FF7A3D"/>
   </g>
+
+  <rect width="512" height="512" rx="112" fill="url(#vignette)"/>
 </svg>
