@@ -2883,6 +2883,24 @@ function topReasonsForPick(rFav, rUnd, favTeam, tags, favIsHome){
   return out.slice(0,3);
 }
 
+function checkDailyPickValue(gameId, favPct){
+  const input = document.getElementById(`dpOdd${gameId}`);
+  const out = document.getElementById(`dpVerdict${gameId}`);
+  if(!input || !out) return;
+  const odd = parseFloat(input.value);
+  if(!odd || odd <= 1){ out.textContent = ''; out.className = 'ts'; return; }
+  const impliedProb = 1 / odd;
+  const edgePts = (favPct - impliedProb) * 100;
+  let verdict, cls;
+  if(edgePts >= 5){ verdict = '💰 Valor claro'; cls = 'sw-tag strength'; }
+  else if(edgePts >= 2){ verdict = '👀 Valor marginal'; cls = 'sw-tag strength'; }
+  else if(edgePts > -2){ verdict = 'Sem valor'; cls = 'sw-tag weakness'; }
+  else { verdict = 'Casa mais otimista'; cls = 'sw-tag weakness'; }
+  out.textContent = `${verdict} (${edgePts>0?'+':''}${edgePts.toFixed(1)}pts)`;
+  out.className = cls;
+  out.style.whiteSpace = 'nowrap';
+}
+
 async function renderDailyPicks(){
   const wrap = document.getElementById('dailyPicksWrap');
   if(!wrap) return;
@@ -2986,6 +3004,10 @@ async function renderDailyPicks(){
         ${p.reasons && p.reasons.length ? `<ul style="margin:5px 0 0; padding-left:16px; font-size:11px; color:var(--ink-dim);">
           ${p.reasons.map(r=>`<li>${r}</li>`).join('')}
         </ul>` : `<div class="daily-pick-tag">diferença normal de nível + vantagem de casa</div>`}
+        <div style="display:flex; align-items:center; gap:8px; width:100%; margin-top:8px;" onclick="event.stopPropagation()">
+          <input type="number" step="0.01" placeholder="odd real ${p.favTeam}" id="dpOdd${p.g.id}" oninput="checkDailyPickValue(${p.g.id}, ${p.favPct})" style="flex:1; padding:6px 9px; font-size:12.5px;">
+          <span id="dpVerdict${p.g.id}" class="ts" style="white-space:nowrap;"></span>
+        </div>
       </div>
     `).join('')}
     ${(highestTotal||closestGame||biggestBlowout||highestTeamScore) ? `<div class="sw-title" style="margin-top:12px;">Outros mercados</div>` : ''}
