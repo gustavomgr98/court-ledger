@@ -3020,7 +3020,7 @@ async function renderDailyPicks(){
         <input type="number" step="0.5" placeholder="linha real" id="dpLine${checker.id}" oninput="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="width:70px; padding:6px 8px; font-size:12.5px;">
         <input type="number" step="0.01" placeholder="odd real" id="dpOdd${checker.id}" oninput="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="flex:1; padding:6px 8px; font-size:12.5px;">
         <span id="dpVerdict${checker.id}" class="ts" style="white-space:nowrap;"></span>
-      </div>` : ''}
+      </div>` : '<div style="color:#FF5C6C; font-size:10px;">[DEBUG: checker ausente]</div>'}
     </div>`;
 
   wrap.innerHTML = `<div class="daily-picks-card">
