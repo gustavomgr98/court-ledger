@@ -730,7 +730,7 @@
         <div class="note">
           Modelo ilustrativo tipo Elo/logístico aplicado à diferença do Rating composto
           (PTS + 0,7×REB + 0,7×AST − 0,7×Perdas de bola + 0,7×Roubos + 0,7×Desarmes + 50×TS%,
-          constante de escala = 12) — TS% conta também os lances livres, ao contrário do eFG% simples.
+          constante de escala = 11) — TS% conta também os lances livres, ao contrário do eFG% simples.
           Cada estatística é ponderada pelos minutos jogados de cada jogador, para um titular de 35 min
           pesar mais do que um suplente de 3 min. Com ajustes calculados diretamente dos jogos reais que
           já temos (não valores assumidos de fora, e que se ajustam sozinhos à medida que a 26-27 acumula
@@ -1368,7 +1368,7 @@ async function renderComparison(){
       if(nextGame.infoA?.backToBack){ diffRating -= B2B_PENALTY; restNote += `${a} está em back-to-back (−${B2B_PENALTY.toFixed(2)} no rating). `; }
       if(nextGame.infoB?.backToBack){ diffRating += B2B_PENALTY; restNote += `${b} está em back-to-back (−${B2B_PENALTY.toFixed(2)} no rating). `; }
     }
-    const pA = 1/(1+Math.pow(10, -diffRating/12));
+    const pA = 1/(1+Math.pow(10, -diffRating/11));
     const pB = 1-pA;
     LAST_WINPROB = {a, b, pA, pB};
     prob.innerHTML = `
@@ -2978,7 +2978,7 @@ async function renderDailyPicks(){
     if(restHome!=null && restHome<=1){ diff -= b2bPenalty; tags.push(`${g.home_team} em back-to-back`); }
     if(restAway!=null && restAway<=1){ diff += b2bPenalty; tags.push(`${g.away_team} em back-to-back`); }
 
-    const pHome = 1/(1+Math.pow(10, -diff/12));
+    const pHome = 1/(1+Math.pow(10, -diff/11));
     const favTeam = pHome>=0.5 ? g.home_team : g.away_team;
     const favPct = Math.max(pHome, 1-pHome);
 
