@@ -3144,10 +3144,62 @@ async function renderDailyPicks(){
     ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Handicap — margem projetada mais clara do dia', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
     ${mostConfidentTotal ? pickRow(`${teamPill(mostConfidentTotal.g.away_team)} @ ${teamPill(mostConfidentTotal.g.home_team)}`, `Total — ${mostConfidentTotal.z.toFixed(1)} desvios-padrão ${mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal?'acima':'abaixo'} da média real da liga (${mostConfidentTotal.leagueAvgTotal.toFixed(1)})`, `${mostConfidentTotal.projTotal.toFixed(1)} pts`, mostConfidentTotal.g, {id:`total-${mostConfidentTotal.g.id}`, mean:mostConfidentTotal.projTotal, sd:sdTotal, side: mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal ? 'over':'under'}) : ''}
     ${mostConfidentTeamScore ? pickRow(`${teamPill(mostConfidentTeamScore.g.away_team)} @ ${teamPill(mostConfidentTeamScore.g.home_team)}`, `Total por Equipa — ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)})`, `${teamPill(mostConfidentTeamScore.team)} ${mostConfidentTeamScore.score.toFixed(1)} pts`, mostConfidentTeamScore.g, {id:`teamscore-${mostConfidentTeamScore.g.id}`, mean:mostConfidentTeamScore.score, sd:sdTeamScore, side: mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore ? 'over':'under'}) : ''}
+    <div id="realValueWrap"></div>
     <button class="ghost" style="margin-top:12px; width:100%;" onclick="askKobeAboutDailyPicks()">💬 Pedir ao Kobe para justificar os Destaques do Dia</button>
   </div>`;
 
   LAST_DAILY_PICKS = { dateLabel, topVencedor, biggestBlowout, mostConfidentTotal, mostConfidentTeamScore };
+  loadRealValuePicks(picks);
+}
+
+async function loadRealValuePicks(vencedorPicks){
+  const wrap = document.getElementById('realValueWrap');
+  if(!wrap || !vencedorPicks || !vencedorPicks.length) return;
+  wrap.innerHTML = `<div class="sw-title" style="margin-top:12px;">💰 Valor Real Detetado</div><div class="ts">A comparar com odds reais…</div>`;
+
+  const gamesPayload = vencedorPicks.map(p => ({ game_id: p.g.id, home_team: p.g.home_team, away_team: p.g.away_team, game_date: p.g.game_date }));
+  try{
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/fetch-real-odds-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY) },
+      body: JSON.stringify({ games: gamesPayload })
+    });
+    const data = await resp.json();
+    if(!data.results){ wrap.innerHTML = ''; return; }
+
+    const valuePicks = [];
+    data.results.forEach((r, i) => {
+      if(r.error || r.home_odd==null || r.away_odd==null) return;
+      const p = vencedorPicks[i];
+      const favIsHome = p.favTeam === p.g.home_team;
+      const realOdd = favIsHome ? r.home_odd : r.away_odd;
+      const impliedProb = 1/realOdd;
+      const edgePts = (p.favPct - impliedProb) * 100;
+      if(edgePts >= 2){
+        valuePicks.push({p, realOdd, edgePts, bookmaker: r.bookmaker, isPreferred: r.isPreferred});
+      }
+    });
+
+    if(!valuePicks.length){
+      wrap.innerHTML = `<div class="sw-title" style="margin-top:12px;">💰 Valor Real Detetado</div><div class="ts">Nenhum valor claro encontrado nas odds disponíveis agora — as casas estão alinhadas com o modelo nestes jogos.</div>`;
+      return;
+    }
+
+    valuePicks.sort((a,b)=> b.edgePts - a.edgePts);
+    wrap.innerHTML = `<div class="sw-title" style="margin-top:12px;">💰 Valor Real Detetado (comparado com odds a sério)</div>
+      ${valuePicks.map(v => `
+        <div class="daily-pick-row" onclick="openComparisonFromGame('${v.p.g.away_team}','${v.p.g.home_team}')">
+          <div>
+            <div class="daily-pick-matchup">${teamPill(v.p.g.away_team)} @ ${teamPill(v.p.g.home_team)}</div>
+            <div class="daily-pick-tag">${teamPill(v.p.favTeam)} @ ${v.realOdd.toFixed(2)} (${v.bookmaker}${v.isPreferred?'':' — reserva, Betano/Bwin sem odds ainda'})</div>
+          </div>
+          <div class="daily-pick-pct">${v.edgePts>=5?'💰':'👀'} +${v.edgePts.toFixed(1)}pts</div>
+        </div>
+      `).join('')}`;
+  } catch(e){
+    wrap.innerHTML = '';
+  }
 }
 
 function renderUpcomingTicker(){
