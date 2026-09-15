@@ -678,7 +678,10 @@
           </div>
         </div>
         <div id="breakevenRef"></div>
-        <div class="field"><label>Odd (decimal, ex: 1.90)</label><input id="valueOddInput" type="number" step="0.01" placeholder="1.90"></div>
+        <div class="field" style="display:flex; align-items:flex-end; gap:8px;">
+          <div style="flex:1;"><label>Odd (decimal, ex: 1.90)</label><input id="valueOddInput" type="number" step="0.01" placeholder="1.90"></div>
+          <button class="ghost" id="fetchRealOddsBtn" style="padding:10px 12px; font-size:12px; white-space:nowrap; display:none;" onclick="fetchRealOddsForVerificador(this)">🔄 Odd real</button>
+        </div>
         <button class="primary" onclick="checkValue()">Verificar</button>
         <div id="valueResultWrap" style="margin-top:16px;"></div>
       </div>
@@ -1769,6 +1772,34 @@ function populateValueTeamSelect(a, b){
   onValueMarketChange();
 }
 
+async function fetchRealOddsForVerificador(btn){
+  if(!LAST_VALUE_MATCHUP){ alert('Escolhe duas equipas na Comparação primeiro.'); return; }
+  const originalText = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  try{
+    const {data: nm} = await sb.rpc('next_matchup', {p_team_a: LAST_VALUE_MATCHUP.a, p_team_b: LAST_VALUE_MATCHUP.b});
+    const game = nm?.[0];
+    if(!game){ alert('Não há jogo agendado entre estas duas equipas ainda.'); return; }
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/fetch-real-odds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY) },
+      body: JSON.stringify({ home_team: game.home_team, away_team: game.away_team, game_date: game.game_date })
+    });
+    const data = await resp.json();
+    if(data.error){ alert(data.detail || 'Ainda sem odds disponíveis para este jogo.'); return; }
+    const team = document.getElementById('valueTeamSelect').value;
+    const odd = (team === game.home_team) ? data.home_odd : (team === game.away_team ? data.away_odd : null);
+    if(odd == null){ alert('Não consegui identificar a odd desta equipa.'); return; }
+    document.getElementById('valueOddInput').value = odd;
+    btn.title = data.isPreferred ? `Odd da ${data.bookmaker}` : `Betano/Bwin ainda sem odds — usada a ${data.bookmaker} como referência`;
+  } catch(e){
+    alert('Erro ao buscar odds: ' + e.message);
+  } finally {
+    btn.textContent = originalText; btn.disabled = false;
+  }
+}
+
 function onValueMarketChange(){
   const mkt = document.getElementById('valueMarketType').value;
   document.getElementById('valueTeamField').style.display = (mkt==='total') ? 'none' : 'block';
@@ -1776,6 +1807,7 @@ function onValueMarketChange(){
   document.getElementById('valueSideField').style.display = (mkt==='total' || mkt==='teamtotal') ? 'block' : 'none';
   document.getElementById('valueLineLabel').textContent = (mkt==='total') ? 'Linha (total combinado)' : (mkt==='handicap' ? 'Handicap da equipa (ex: -3.5)' : (mkt==='teamtotal' ? 'Linha (pontos da equipa)' : 'Linha'));
   document.getElementById('valueResultWrap').innerHTML = '';
+  document.getElementById('fetchRealOddsBtn').style.display = (mkt==='vencedor') ? 'block' : 'none';
   showBreakevenReference();
 }
 
@@ -2909,6 +2941,39 @@ function checkDailyLineValue(id, projMean, sd, side){
   out.style.whiteSpace = 'nowrap';
 }
 
+async function fetchRealOddsForPick(btn, gameId, homeTeam, awayTeam, gameDate, favTeam){
+  const originalText = btn.textContent;
+  btn.textContent = '...'; btn.disabled = true;
+  try{
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/fetch-real-odds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY) },
+      body: JSON.stringify({ home_team: homeTeam, away_team: awayTeam, game_date: gameDate })
+    });
+    const data = await resp.json();
+    const input = document.getElementById(`dpOdd${gameId}`);
+    if(data.error){
+      alert(data.detail || 'Ainda sem odds disponíveis para este jogo.');
+      return;
+    }
+    const isHomeFav = favTeam === homeTeam;
+    const odd = isHomeFav ? data.home_odd : data.away_odd;
+    if(odd == null){ alert('Não consegui identificar a odd do Vencedor nesta casa.'); return; }
+    input.value = odd;
+    input.dispatchEvent(new Event('input'));
+    if(!data.isPreferred){
+      btn.title = `Betano/Bwin ainda sem odds — usada a ${data.bookmaker} como referência`;
+    } else {
+      btn.title = `Odd da ${data.bookmaker}`;
+    }
+  } catch(e){
+    alert('Erro ao buscar odds: ' + e.message);
+  } finally {
+    btn.textContent = originalText; btn.disabled = false;
+  }
+}
+
 function checkDailyPickValue(gameId, favPct){
   const input = document.getElementById(`dpOdd${gameId}`);
   const out = document.getElementById(`dpVerdict${gameId}`);
@@ -3070,6 +3135,7 @@ async function renderDailyPicks(){
         </ul>` : `<div class="daily-pick-tag">diferença normal de nível + vantagem de casa</div>`}
         <div style="display:flex; align-items:center; gap:8px; width:100%; margin-top:8px;" onclick="event.stopPropagation()">
           <input type="number" step="0.01" placeholder="odd real ${p.favTeam}" id="dpOdd${p.g.id}" oninput="checkDailyPickValue(${p.g.id}, ${p.favPct})" style="flex:1; padding:6px 9px; font-size:12.5px;">
+          <button class="ghost" style="padding:6px 10px; font-size:11px; white-space:nowrap;" onclick="fetchRealOddsForPick(this, ${p.g.id}, '${p.g.home_team}', '${p.g.away_team}', '${p.g.game_date}', '${p.favTeam}')">🔄 Odd real</button>
           <span id="dpVerdict${p.g.id}" class="ts" style="white-space:nowrap;"></span>
         </div>
       </div>
