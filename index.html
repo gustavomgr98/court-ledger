@@ -1787,6 +1787,10 @@ async function fetchRealOddsForVerificador(btn){
       body: JSON.stringify({ home_team: game.home_team, away_team: game.away_team, game_date: game.game_date })
     });
     const data = await resp.json();
+    if(data.error === 'quota_exhausted'){
+      alert('📊 Chegámos ao limite gratuito mensal de pedidos de odds reais. Esta função volta a funcionar no próximo mês (ou quando o plano for atualizado) — o resto da app continua normal.');
+      return;
+    }
     if(data.error){ alert(data.detail || 'Ainda sem odds disponíveis para este jogo.'); return; }
     const team = document.getElementById('valueTeamSelect').value;
     const odd = (team === game.home_team) ? data.home_odd : (team === game.away_team ? data.away_odd : null);
@@ -2953,6 +2957,10 @@ async function fetchRealOddsForPick(btn, gameId, homeTeam, awayTeam, gameDate, f
     });
     const data = await resp.json();
     const input = document.getElementById(`dpOdd${gameId}`);
+    if(data.error === 'quota_exhausted'){
+      alert('📊 Chegámos ao limite gratuito mensal de pedidos de odds reais. Esta função volta a funcionar no próximo mês (ou quando o plano for atualizado) — o resto da app continua normal.');
+      return;
+    }
     if(data.error){
       alert(data.detail || 'Ainda sem odds disponíveis para este jogo.');
       return;
@@ -3167,6 +3175,11 @@ async function loadRealValuePicks(vencedorPicks){
     });
     const data = await resp.json();
     if(!data.results){ wrap.innerHTML = ''; return; }
+
+    if(data.results.some(r => r.error === 'quota_exhausted')){
+      wrap.innerHTML = `<div class="sw-title" style="margin-top:12px;">💰 Valor Real Detetado</div><div class="ts">📊 Limite gratuito mensal de odds reais atingido por agora — esta secção volta assim que o limite reiniciar (ou o plano for atualizado). O resto da app continua normal.</div>`;
+      return;
+    }
 
     const valuePicks = [];
     data.results.forEach((r, i) => {
