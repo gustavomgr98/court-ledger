@@ -3152,12 +3152,11 @@ async function renderDailyPicks(){
     ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Handicap — margem projetada mais clara do dia', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
     ${mostConfidentTotal ? pickRow(`${teamPill(mostConfidentTotal.g.away_team)} @ ${teamPill(mostConfidentTotal.g.home_team)}`, `Total — ${mostConfidentTotal.z.toFixed(1)} desvios-padrão ${mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal?'acima':'abaixo'} da média real da liga (${mostConfidentTotal.leagueAvgTotal.toFixed(1)})`, `${mostConfidentTotal.projTotal.toFixed(1)} pts`, mostConfidentTotal.g, {id:`total-${mostConfidentTotal.g.id}`, mean:mostConfidentTotal.projTotal, sd:sdTotal, side: mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal ? 'over':'under'}) : ''}
     ${mostConfidentTeamScore ? pickRow(`${teamPill(mostConfidentTeamScore.g.away_team)} @ ${teamPill(mostConfidentTeamScore.g.home_team)}`, `Total por Equipa — ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)})`, `${teamPill(mostConfidentTeamScore.team)} ${mostConfidentTeamScore.score.toFixed(1)} pts`, mostConfidentTeamScore.g, {id:`teamscore-${mostConfidentTeamScore.g.id}`, mean:mostConfidentTeamScore.score, sd:sdTeamScore, side: mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore ? 'over':'under'}) : ''}
-    <div id="realValueWrap"></div>
+    <div id="realValueWrap"><button class="ghost" style="margin-top:12px; width:100%;" onclick="loadRealValuePicks(LAST_DAILY_PICKS.allPicks)">🔄 Verificar valor real (odds Betano/Bwin)</button></div>
     <button class="ghost" style="margin-top:12px; width:100%;" onclick="askKobeAboutDailyPicks()">💬 Pedir ao Kobe para justificar os Destaques do Dia</button>
   </div>`;
 
-  LAST_DAILY_PICKS = { dateLabel, topVencedor, biggestBlowout, mostConfidentTotal, mostConfidentTeamScore };
-  loadRealValuePicks(picks);
+  LAST_DAILY_PICKS = { dateLabel, topVencedor, biggestBlowout, mostConfidentTotal, mostConfidentTeamScore, allPicks: picks };
 }
 
 async function loadRealValuePicks(vencedorPicks){
