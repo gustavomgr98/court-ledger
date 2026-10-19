@@ -528,6 +528,7 @@
       <button class="tab-btn" data-tab="classificacao">Classificação</button>
       <button class="tab-btn" data-tab="transacoes">Transferências</button>
       <button class="tab-btn" data-tab="comparacao">Comparação de Equipas</button>
+      <button class="tab-btn" data-tab="previsoes">Previsões</button>
       <button class="tab-btn" data-tab="registo">Registo</button>
       <button class="tab-btn" data-tab="glossario">Glossário</button>
     </nav>
@@ -748,6 +749,16 @@
     </section>
 
     <!-- REGISTO: calibracao do modelo + apostas -->
+    <!-- PREVISÕES -->
+    <section id="tab-previsoes">
+      <div class="panel">
+        <h2>Previsões da app</h2>
+        <div class="sub">Todas as previsões de Vencedor guardadas pela app, por ordem cronológica dos jogos. Verde = acertou, vermelho = falhou, cinzento = jogo ainda por decidir.</div>
+        <div id="predSummary"></div>
+        <div id="predList" class="loading">A carregar…</div>
+      </div>
+    </section>
+
     <section id="tab-registo">
       <div class="panel">
         <h2>Calibração do Modelo</h2>
@@ -2733,6 +2744,46 @@ async function renderCourtsForBothTeams(){
 
 let ALL_GAMES = [];
 
+let PRED_ROWS = [];
+async function loadPredictions(){
+  const {data, error} = await sb.from('prediction_log').select('*').order('game_date').order('game_id');
+  if(error){ const w=document.getElementById('predList'); if(w) w.textContent='Erro: '+error.message; return; }
+  PRED_ROWS = data || [];
+  renderPredictions();
+}
+
+function renderPredictions(){
+  const list = document.getElementById('predList'), sum = document.getElementById('predSummary');
+  if(!list || !sum) return;
+  const timeOf = id => { const g = (ALL_GAMES||[]).find(x=>x.id===id); return g && g.game_time ? new Date(g.game_time).getTime() : 0; };
+  const rows = PRED_ROWS.slice().sort((a,b)=> (a.game_date<b.game_date?-1:a.game_date>b.game_date?1:0) || (timeOf(a.game_id)-timeOf(b.game_id)) || (a.game_id-b.game_id));
+  const hits = rows.filter(r=>r.correct===true).length;
+  const miss = rows.filter(r=>r.correct===false).length;
+  const pend = rows.length - hits - miss;
+  const pct = (hits+miss) ? Math.round(hits/(hits+miss)*100) : null;
+  const box = (n,l,c) => `<div style="flex:1; text-align:center; padding:10px 6px; border-radius:8px; background:${c}22; border:1px solid ${c}66;"><div style="font-size:22px; font-weight:700; color:${c};">${n}</div><div class="ts">${l}</div></div>`;
+  sum.innerHTML = `<div style="display:flex; gap:8px; margin:12px 0;">${box(hits,'Acertos','#2fb86a')}${box(miss,'Falhas','#e5484d')}${box(pend,'Pendentes','#8a8f98')}${box(pct===null?'—':pct+'%','Taxa de acerto','#5b8def')}</div>`;
+  if(!rows.length){ list.className=''; list.innerHTML='<div class="ts">Ainda sem previsões registadas. São guardadas automaticamente nos 2 dias antes de cada jogo.</div>'; return; }
+  list.className='';
+  list.innerHTML = rows.map(r=>{
+    const g = (ALL_GAMES||[]).find(x=>x.id===r.game_id);
+    const dt = g ? fmtGameDateTime(g) : {dateLabel: fmtGameDate(r.game_date), timeLabel:'—'};
+    const away = r.home_team===r.team_a ? r.team_b : r.team_a;
+    const c = r.correct===true ? '#2fb86a' : r.correct===false ? '#e5484d' : '#8a8f98';
+    const icon = r.correct===true ? '✅' : r.correct===false ? '❌' : '⏳';
+    const fav = r.favored_team;
+    const pf = r.pred_prob_a==null ? null : (fav===r.team_a ? r.pred_prob_a : 1-r.pred_prob_a);
+    const score = (r.actual_home_score!=null && r.actual_away_score!=null) ? `Final: ${away} ${r.actual_away_score} – ${r.actual_home_score} ${r.home_team}` : '';
+    return `<div style="border-left:5px solid ${c}; background:${c}18; border-radius:8px; padding:9px 11px; margin-bottom:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div>${teamPill(away)} @ ${teamPill(r.home_team)}</div><div style="font-size:18px;">${icon}</div></div>
+      <div class="ts" style="margin-top:2px;">${dt.dateLabel} · ${dt.timeLabel}</div>
+      <div style="margin-top:4px; font-size:13px;">Previsão: <b>${fav}</b>${pf!=null?' '+Math.round(pf*100)+'%':''}${r.actual_winner?` · Venceu: <b>${r.actual_winner}</b>`:''}</div>
+      ${score?`<div class="ts">${score}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
 async function loadCalendar(){
   const {data, error} = await sb.from('games').select('*').eq('season', '2026-27').order('game_date').order('game_time', {nullsFirst: false});
   if(error) throw new Error('games: ' + error.message);
@@ -2740,6 +2791,7 @@ async function loadCalendar(){
   renderCalendar();
   renderUpcomingTicker();
   renderDailyPicks();
+  loadPredictions();
 }
 
 function setupTickerDrag(){
@@ -2889,9 +2941,16 @@ function checkDailyLineValue(id, projMean, sd, side){
   const oddInput = document.getElementById(`dpOdd${id}`);
   const out = document.getElementById(`dpVerdict${id}`);
   if(!lineInput || !oddInput || !out) return;
-  const line = parseFloat(lineInput.value);
-  const odd = parseFloat(oddInput.value);
+  const num = v => parseFloat(String(v).replace(',', '.').replace(/[\u2212\u2013]/g, '-').trim());
+  let line = num(lineInput.value);
+  const odd = num(oddInput.value);
   if(isNaN(line) || !odd || odd <= 1){ out.textContent = ''; out.className = 'ts'; return; }
+  if(side==='cover'){
+    // no iPhone o teclado decimal nao tem '-': o sinal escolhe-se no seletor. Se escreveres o sinal, ele manda.
+    const sg = document.getElementById(`dpSign${id}`);
+    const typedSign = /^\s*[-+\u2212]/.test(lineInput.value);
+    if(!typedSign) line = (sg && sg.value==='+' ? 1 : -1) * Math.abs(line);
+  }
   // side='over' cobre acima da linha (Total/Total por Equipa); side='under' cobre abaixo;
   // side='cover' e' o handicap (cobre se a margem projetada ultrapassar a linha dada)
   let modelProb;
@@ -3048,8 +3107,9 @@ async function renderDailyPicks(){
       <div class="ts" style="margin-top:1px;">${fmtGameDateTime(g).dateLabel} · ${fmtGameDateTime(g).timeLabel} (hora local)</div>
       <div class="daily-pick-tag">${tagText}</div>
       ${checker ? `<div style="display:flex; align-items:center; gap:6px; width:100%; margin-top:8px;" onclick="event.stopPropagation()">
-        <input type="number" step="0.5" placeholder="linha real" id="dpLine${checker.id}" oninput="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="width:70px; padding:6px 8px; font-size:12.5px;">
-        <input type="number" step="0.01" placeholder="odd real" id="dpOdd${checker.id}" oninput="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="flex:1; padding:6px 8px; font-size:12.5px;">
+        ${checker.side==='cover' ? `<select id="dpSign${checker.id}" onchange="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="padding:6px 4px; font-size:12.5px;"><option value="-">−</option><option value="+">+</option></select>` : ''}
+        <input type="text" inputmode="decimal" placeholder="${checker.side==='cover' ? 'handicap (ex: 3.5)' : 'linha real'}" id="dpLine${checker.id}" oninput="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="width:${checker.side==='cover' ? '110' : '70'}px; padding:6px 8px; font-size:12.5px;">
+        <input type="text" inputmode="decimal" placeholder="odd real" id="dpOdd${checker.id}" oninput="checkDailyLineValue('${checker.id}', ${checker.mean}, ${checker.sd}, '${checker.side}')" style="flex:1; padding:6px 8px; font-size:12.5px;">
         <span id="dpVerdict${checker.id}" class="ts" style="white-space:nowrap;"></span>
       </div>` : ''}
     </div>`;
@@ -3075,7 +3135,7 @@ async function renderDailyPicks(){
       </div>
     `).join('')}
     ${biggestBlowout ? `<div class="sw-title" style="margin-top:12px;">Mais confiantes noutros mercados</div>` : ''}
-    ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Handicap — margem projetada mais clara do dia', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
+    ${biggestBlowout ? pickRow(`${teamPill(biggestBlowout.g.away_team)} @ ${teamPill(biggestBlowout.g.home_team)}`, 'Handicap — margem projetada mais clara do dia (linha da equipa favorita: − dá pontos, + recebe)', `${teamPill(biggestBlowout.projMargin>=0?biggestBlowout.g.home_team:biggestBlowout.g.away_team)} ${Math.abs(biggestBlowout.projMargin).toFixed(1)} pts`, biggestBlowout.g, {id:`blowout-${biggestBlowout.g.id}`, mean:Math.abs(biggestBlowout.projMargin), sd:sdMargin, side:'cover'}) : ''}
     ${mostConfidentTotal ? pickRow(`${teamPill(mostConfidentTotal.g.away_team)} @ ${teamPill(mostConfidentTotal.g.home_team)}`, `Total — ${mostConfidentTotal.z.toFixed(1)} desvios-padrão ${mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal?'acima':'abaixo'} da média real da liga (${mostConfidentTotal.leagueAvgTotal.toFixed(1)})`, `${mostConfidentTotal.projTotal.toFixed(1)} pts`, mostConfidentTotal.g, {id:`total-${mostConfidentTotal.g.id}`, mean:mostConfidentTotal.projTotal, sd:sdTotal, side: mostConfidentTotal.projTotal>=mostConfidentTotal.leagueAvgTotal ? 'over':'under'}) : ''}
     ${mostConfidentTeamScore ? pickRow(`${teamPill(mostConfidentTeamScore.g.away_team)} @ ${teamPill(mostConfidentTeamScore.g.home_team)}`, `Total por Equipa — ${mostConfidentTeamScore.z.toFixed(1)} desvios-padrão ${mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore?'acima':'abaixo'} da média real por equipa (${mostConfidentTeamScore.leagueAvgTeamScore.toFixed(1)})`, `${teamPill(mostConfidentTeamScore.team)} ${mostConfidentTeamScore.score.toFixed(1)} pts`, mostConfidentTeamScore.g, {id:`teamscore-${mostConfidentTeamScore.g.id}`, mean:mostConfidentTeamScore.score, sd:sdTeamScore, side: mostConfidentTeamScore.score>=mostConfidentTeamScore.leagueAvgTeamScore ? 'over':'under'}) : ''}
     <button class="ghost" style="margin-top:12px; width:100%;" onclick="askKobeAboutDailyPicks()">💬 Pedir ao Kobe para justificar os Destaques do Dia</button>
