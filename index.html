@@ -2887,8 +2887,8 @@ function renderPredGame(r){
   const dt = (()=>{ const g=(ALL_GAMES||[]).find(x=>x.id===r.game_id); return g ? fmtGameDateTime(g) : {dateLabel: fmtGameDate(r.game_date), timeLabel:'—'}; })();
   const f1 = x => Number(x).toFixed(1);
   const fav = m.mHome>=0 ? m.home : m.away;
-  const inp = (id, ph, w, kind) => `<input type="text" inputmode="decimal" id="${id}" placeholder="${ph}" oninput="pgCheck('${kind}')" style="${w?`width:${w}px;`:'flex:1;'} padding:6px 8px; font-size:12.5px;">`;
-  const sel = (id, opts, kind) => `<select id="${id}" onchange="pgCheck('${kind}')" style="padding:6px 4px; font-size:12.5px;">${opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select>`;
+  const inp = (id, ph, w, kind) => `<input type="text" inputmode="decimal" id="${id}" placeholder="${ph}" oninput="pgCheck('${kind}')" style="${w?`width:${w}px; flex:0 0 auto;`:'flex:1 1 100%; min-width:0; width:100%;'} padding:8px 10px; font-size:14px; box-sizing:border-box;">`;
+  const sel = (id, opts, kind) => `<select id="${id}" onchange="pgCheck('${kind}')" style="padding:8px 4px; font-size:14px; width:auto; flex:0 0 auto;">${opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select>`;
   const block = (title, proj, body) => `<div style="border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px;">
       <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;"><b>${title}</b><span class="ts">${proj}</span></div>${body}</div>`;
   const teamOpts = [[m.home, m.home],[m.away, m.away]];
@@ -2900,17 +2900,17 @@ function renderPredGame(r){
     <div class="sub" style="margin:10px 0;">Mete a linha e a odd real de cada mercado — a app diz se há valor face à previsão do modelo.</div>
 
     ${block('Vencedor', `${teamPill(fav)} favorito · ${m.pHome==null?'—':Math.round((m.mHome>=0?m.pHome:1-m.pHome)*100)+'%'}`, `
-      <div style="display:flex; gap:8px; margin-top:8px; align-items:center;"><span style="min-width:44px;">${teamPill(m.home)}</span>${inp('pgWinOddH','odd real',0,'win')}</div><div id="pgWinOutH" style="margin-top:4px;"></div>
-      <div style="display:flex; gap:8px; margin-top:8px; align-items:center;"><span style="min-width:44px;">${teamPill(m.away)}</span>${inp('pgWinOddA','odd real',0,'win')}</div><div id="pgWinOutA" style="margin-top:4px;"></div>`)}
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center;"><span style="min-width:44px;">${teamPill(m.home)}</span>${inp('pgWinOddH','odd real',0,'win')}</div><div id="pgWinOutH" style="margin-top:4px;"></div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center;"><span style="min-width:44px;">${teamPill(m.away)}</span>${inp('pgWinOddA','odd real',0,'win')}</div><div id="pgWinOutA" style="margin-top:4px;"></div>`)}
 
     ${block('Handicap', `${m.mHome>=0?m.home:m.away} −${f1(Math.abs(m.mHome))} / ${m.mHome>=0?m.away:m.home} +${f1(Math.abs(m.mHome))}`, `
-      <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">${sel('pgHcpTeam',teamOpts,'Hcp')}${sel('pgHcpSign',[['-','−'],['+','+']],'Hcp')}${inp('pgHcpLine','linha (3.5)',80,'Hcp')}${inp('pgHcpOdd','odd real',0,'Hcp')}</div><div id="pgHcpOut" style="margin-top:6px;"></div>`)}
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center;">${sel('pgHcpTeam',teamOpts,'Hcp')}${sel('pgHcpSign',[['-','−'],['+','+']],'Hcp')}${inp('pgHcpLine','linha (3.5)',80,'Hcp')}${inp('pgHcpOdd','odd real',0,'Hcp')}</div><div id="pgHcpOut" style="margin-top:6px;"></div>`)}
 
     ${block('Total de pontos', `projeção ${f1(m.total)}`, `
-      <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">${sel('pgTotSide',[['over','Over'],['under','Under']],'Tot')}${inp('pgTotLine','linha (226.5)',90,'Tot')}${inp('pgTotOdd','odd real',0,'Tot')}</div><div id="pgTotOut" style="margin-top:6px;"></div>`)}
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center;">${sel('pgTotSide',[['over','Over'],['under','Under']],'Tot')}${inp('pgTotLine','linha (226.5)',90,'Tot')}${inp('pgTotOdd','odd real',0,'Tot')}</div><div id="pgTotOut" style="margin-top:6px;"></div>`)}
 
     ${block('Total por equipa', `${m.home} ${f1(m.sHome)} · ${m.away} ${f1(m.sAway)}`, `
-      <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">${sel('pgTtTeam',teamOpts,'Tt')}${sel('pgTtSide',[['over','Over'],['under','Under']],'Tt')}${inp('pgTtLine','linha (113.5)',90,'Tt')}${inp('pgTtOdd','odd real',0,'Tt')}</div><div id="pgTtOut" style="margin-top:6px;"></div>`)}
+      <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center;">${sel('pgTtTeam',teamOpts,'Tt')}${sel('pgTtSide',[['over','Over'],['under','Under']],'Tt')}${inp('pgTtLine','linha (113.5)',90,'Tt')}${inp('pgTtOdd','odd real',0,'Tt')}</div><div id="pgTtOut" style="margin-top:6px;"></div>`)}
 
     <div style="margin-top:14px;">
       <button class="primary" style="width:100%;" onclick="askKobeJustifyGame()">💬 Pedir ao Kobe para justificar estas previsões</button>
