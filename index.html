@@ -753,7 +753,7 @@
     <section id="tab-previsoes">
       <div class="panel">
         <h2>Previsões da app</h2>
-        <div class="sub">Todas as previsões de Vencedor guardadas pela app, por ordem cronológica dos jogos. Verde = acertou, vermelho = falhou, cinzento = jogo ainda por decidir.</div>
+        <div class="sub">Todas as previsões guardadas pela app (Vencedor, Total, Handicap e Total por Equipa), por ordem cronológica dos jogos. Verde = acertou, vermelho = falhou, cinzento = jogo ainda por decidir.</div>
         <div id="predSummary"></div>
         <div id="predList" class="loading">A carregar…</div>
       </div>
@@ -2745,10 +2745,12 @@ async function renderCourtsForBothTeams(){
 let ALL_GAMES = [];
 
 let PRED_ROWS = [];
+let PRED_SD = null;
 async function loadPredictions(){
   const {data, error} = await sb.from('prediction_log').select('*').order('game_date').order('game_id');
   if(error){ const w=document.getElementById('predList'); if(w) w.textContent='Erro: '+error.message; return; }
   PRED_ROWS = data || [];
+  if(!PRED_SD){ const v = await sb.rpc('get_scoring_variance'); PRED_SD = v.data?.[0] || {sd_margin:16.3, sd_total:19.8, sd_team_score:12.9}; }
   renderPredictions();
 }
 
@@ -2761,8 +2763,26 @@ function renderPredictions(){
   const miss = rows.filter(r=>r.correct===false).length;
   const pend = rows.length - hits - miss;
   const pct = (hits+miss) ? Math.round(hits/(hits+miss)*100) : null;
+  const sd = PRED_SD || {sd_margin:16.3, sd_total:19.8, sd_team_score:12.9};
+  const num = x => x==null ? null : Number(x);
+  // acerto de Total/Handicap/Total por Equipa = erro dentro de meio desvio-padrao real da liga (mesmo criterio da Calibracao)
+  const mk = r => {
+    if(r.pred_total==null) return null;
+    const res = r.actual_total!=null;
+    const t = res ? Math.abs(num(r.pred_total)-num(r.actual_total)) <= 0.5*num(sd.sd_total) : null;
+    const m = res ? Math.abs(num(r.pred_margin_home)-num(r.actual_margin_home)) <= 0.5*num(sd.sd_margin) : null;
+    const th = res ? Math.abs(num(r.pred_home_score)-num(r.actual_home_score)) <= 0.5*num(sd.sd_team_score) : null;
+    const ta = res ? Math.abs(num(r.pred_away_score)-num(r.actual_away_score)) <= 0.5*num(sd.sd_team_score) : null;
+    return {t,m,th,ta};
+  };
+  const tally = {t:[0,0], m:[0,0], ts:[0,0]};
+  rows.forEach(r=>{ const x = mk(r); if(!x || x.t===null) return;
+    tally.t[x.t?0:1]++; tally.m[x.m?0:1]++; [x.th,x.ta].forEach(b=>tally.ts[b?0:1]++); });
+  const mrow = (l,a) => `<div style="display:flex; justify-content:space-between; padding:3px 0;"><span>${l}</span><span><b style="color:#2fb86a;">${a[0]}</b> / <b style="color:#e5484d;">${a[1]}</b>${(a[0]+a[1])?` · ${Math.round(a[0]/(a[0]+a[1])*100)}%`:''}</span></div>`;
   const box = (n,l,c) => `<div style="flex:1; text-align:center; padding:10px 6px; border-radius:8px; background:${c}22; border:1px solid ${c}66;"><div style="font-size:22px; font-weight:700; color:${c};">${n}</div><div class="ts">${l}</div></div>`;
-  sum.innerHTML = `<div style="display:flex; gap:8px; margin:12px 0;">${box(hits,'Acertos','#2fb86a')}${box(miss,'Falhas','#e5484d')}${box(pend,'Pendentes','#8a8f98')}${box(pct===null?'—':pct+'%','Taxa de acerto','#5b8def')}</div>`;
+  sum.innerHTML = `<div style="display:flex; gap:8px; margin:12px 0;">${box(hits,'Acertos','#2fb86a')}${box(miss,'Falhas','#e5484d')}${box(pend,'Pendentes','#8a8f98')}${box(pct===null?'—':pct+'%','Taxa de acerto','#5b8def')}</div>
+    <div class="ts" style="margin-bottom:4px;">Por mercado (acertos / falhas) — Total, Handicap e Total por Equipa contam como acerto quando o erro fica dentro de meio desvio-padrão real da liga:</div>
+    <div style="font-size:13px; margin-bottom:12px;">${mrow('Vencedor',[hits,miss])}${mrow('Total de pontos',tally.t)}${mrow('Handicap / margem',tally.m)}${mrow('Total por equipa',tally.ts)}</div>`;
   if(!rows.length){ list.className=''; list.innerHTML='<div class="ts">Ainda sem previsões registadas. São guardadas automaticamente nos 2 dias antes de cada jogo.</div>'; return; }
   list.className='';
   list.innerHTML = rows.map(r=>{
@@ -2780,6 +2800,13 @@ function renderPredictions(){
       <div class="ts" style="margin-top:2px;">${dt.dateLabel} · ${dt.timeLabel}</div>
       <div style="margin-top:4px; font-size:13px;">Previsão: <b>${fav}</b>${pf!=null?' '+Math.round(pf*100)+'%':''}${r.actual_winner?` · Venceu: <b>${r.actual_winner}</b>`:''}</div>
       ${score?`<div class="ts">${score}</div>`:''}
+      ${(()=>{ const x = mk(r); if(!x) return '';
+        const chip = (lbl, pred, act, ok) => { const col = ok===null ? '#8a8f98' : ok ? '#2fb86a' : '#e5484d';
+          return `<span style="display:inline-block; margin:4px 6px 0 0; padding:2px 7px; border-radius:6px; font-size:11.5px; background:${col}22; border:1px solid ${col}77; color:${col};">${lbl} ${pred}${act!=null?' → '+act:''}</span>`; };
+        const f1 = v => Number(v).toFixed(1);
+        const hm = num(r.pred_margin_home), am = r.actual_margin_home;
+        const mtxt = v => (v>=0 ? r.home_team : away) + ' ' + f1(Math.abs(v));
+        return `<div>${chip('Total', f1(r.pred_total), r.actual_total, x.t)}${chip('Handicap', mtxt(hm), am==null?null:mtxt(num(am)), x.m)}${chip(r.home_team, f1(r.pred_home_score), r.actual_home_score, x.th)}${chip(away, f1(r.pred_away_score), r.actual_away_score, x.ta)}</div>`; })()}
     </div>`;
   }).join('');
 }
