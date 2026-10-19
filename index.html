@@ -518,7 +518,6 @@
   <div id="seasonCountdown"></div>
   <div id="staleDataBanner" style="display:none;"></div>
   <div id="upcomingTicker"></div>
-  <div id="dailyPicksWrap"></div>
 
   <div class="wrap">
     <nav>
@@ -753,9 +752,10 @@
     <section id="tab-previsoes">
       <div class="panel">
         <h2>Previsões da app</h2>
-        <div class="sub">Todas as previsões guardadas pela app (Vencedor, Total, Handicap e Total por Equipa), por ordem cronológica dos jogos. Verde = acertou, vermelho = falhou, cinzento = jogo ainda por decidir.</div>
+        <div id="predHint" class="sub">Carrega num jogo para meter as odds reais, ver se há valor e pedir ao Kobe para justificar. Todas as previsões guardadas pela app (Vencedor, Total, Handicap e Total por Equipa), por ordem cronológica dos jogos. Verde = acertou, vermelho = falhou, cinzento = jogo ainda por decidir.</div>
         <div id="predSummary"></div>
         <div id="predList" class="loading">A carregar…</div>
+        <div id="predDetail" style="display:none;"></div>
       </div>
     </section>
 
@@ -2794,7 +2794,7 @@ function renderPredictions(){
     const fav = r.favored_team;
     const pf = r.pred_prob_a==null ? null : (fav===r.team_a ? r.pred_prob_a : 1-r.pred_prob_a);
     const score = (r.actual_home_score!=null && r.actual_away_score!=null) ? `Final: ${teamPill(away)} ${r.actual_away_score} – ${r.actual_home_score} ${teamPill(r.home_team)}` : '';
-    return `<div style="border-left:5px solid ${c}; background:${c}18; border-radius:8px; padding:9px 11px; margin-bottom:8px;">
+    return `<div onclick="openPredGame(${r.game_id})" style="cursor:pointer; border-left:5px solid ${c}; background:${c}18; border-radius:8px; padding:9px 11px; margin-bottom:8px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div>${teamPill(away)} @ ${teamPill(r.home_team)}</div><div style="font-size:18px;">${icon}</div></div>
       <div class="ts" style="margin-top:2px;">${dt.dateLabel} · ${dt.timeLabel}</div>
@@ -2811,13 +2811,146 @@ function renderPredictions(){
   }).join('');
 }
 
+// ===== Pagina de jogo (Previsoes): odds reais + valor + Kobe =====
+let PRED_OPEN = null;
+function pgNum(v){ return parseFloat(String(v==null?'':v).replace(',', '.').replace(/[−–]/g,'-').trim()); }
+
+function openPredGame(gameId){
+  const r = PRED_ROWS.find(x=>x.game_id===gameId); if(!r) return;
+  PRED_OPEN = gameId;
+  document.getElementById('predSummary').style.display='none';
+  document.getElementById('predList').style.display='none';
+  const hint = document.getElementById('predHint'); if(hint) hint.style.display='none';
+  const d = document.getElementById('predDetail'); d.style.display='block';
+  renderPredGame(r);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function closePredGame(){
+  PRED_OPEN = null;
+  document.getElementById('predDetail').style.display='none';
+  document.getElementById('predSummary').style.display='';
+  document.getElementById('predList').style.display='';
+  const hint = document.getElementById('predHint'); if(hint) hint.style.display='';
+}
+
+function pgModel(r){
+  const sd = PRED_SD || {sd_margin:16.3, sd_total:19.8, sd_team_score:12.9};
+  const home = r.home_team, away = r.home_team===r.team_a ? r.team_b : r.team_a;
+  const pHome = r.pred_prob_a==null ? null : (r.team_a===home ? Number(r.pred_prob_a) : 1-Number(r.pred_prob_a));
+  return { home, away, pHome, sdM:Number(sd.sd_margin), sdT:Number(sd.sd_total), sdTS:Number(sd.sd_team_score),
+    mHome:Number(r.pred_margin_home), total:Number(r.pred_total), sHome:Number(r.pred_home_score), sAway:Number(r.pred_away_score) };
+}
+
+function pgVerdict(modelProb, odd, elId, extra){
+  const out = document.getElementById(elId); if(!out) return;
+  if(!(odd>1) || modelProb==null || isNaN(modelProb)){ out.innerHTML=''; return; }
+  const edge = (modelProb - 1/odd)*100;
+  let verdict, cls;
+  if(edge >= 5){ verdict='💰 Valor claro'; cls='sw-tag strength'; }
+  else if(edge >= 2){ verdict='👀 Valor marginal'; cls='sw-tag strength'; }
+  else if(edge > -2){ verdict='Sem valor'; cls='sw-tag weakness'; }
+  else { verdict='Casa mais otimista'; cls='sw-tag weakness'; }
+  out.innerHTML = `<span class="${cls}" style="white-space:nowrap;">${verdict} (${edge>0?'+':''}${edge.toFixed(1)}pts)</span>
+    <div class="ts" style="margin-top:3px;">Modelo: ${(modelProb*100).toFixed(1)}% · odd justa ${(1/modelProb).toFixed(2)} · casa implica ${(100/odd).toFixed(1)}%${extra?' · '+extra:''}</div>`;
+}
+
+function pgCheck(kind){
+  const r = PRED_ROWS.find(x=>x.game_id===PRED_OPEN); if(!r) return;
+  const m = pgModel(r);
+  const v = id => (document.getElementById(id)||{}).value;
+  if(kind==='win'){
+    [['H',m.home,m.pHome],['A',m.away,m.pHome==null?null:1-m.pHome]].forEach(([k,t,p])=> pgVerdict(p, pgNum(v('pgWinOdd'+k)), 'pgWinOut'+k));
+    return;
+  }
+  const odd = pgNum(v(`pg${kind}Odd`));
+  let line = pgNum(v(`pg${kind}Line`));
+  if(isNaN(line)){ document.getElementById(`pg${kind}Out`).innerHTML=''; return; }
+  if(kind==='Hcp'){
+    const team = v('pgHcpTeam');
+    const typed = /^\s*[-+−]/.test(v('pgHcpLine'));
+    if(!typed) line = (v('pgHcpSign')==='+' ? 1 : -1) * Math.abs(line);
+    const mean = team===m.home ? m.mHome : -m.mHome;
+    const p = 1 - normalCdf(-line, mean, m.sdM);
+    pgVerdict(p, odd, 'pgHcpOut', `${team} ${line>0?'+':'−'}${Math.abs(line)} (margem projetada ${mean>0?'+':''}${mean.toFixed(1)})`);
+  } else if(kind==='Tot'){
+    const over = 1 - normalCdf(line, m.total, m.sdT);
+    pgVerdict(v('pgTotSide')==='over' ? over : 1-over, odd, 'pgTotOut', `total projetado ${m.total.toFixed(1)}`);
+  } else if(kind==='Tt'){
+    const team = v('pgTtTeam'); const mean = team===m.home ? m.sHome : m.sAway;
+    const over = 1 - normalCdf(line, mean, m.sdTS);
+    pgVerdict(v('pgTtSide')==='over' ? over : 1-over, odd, 'pgTtOut', `${team} projetado ${mean.toFixed(1)}`);
+  }
+}
+
+function renderPredGame(r){
+  const m = pgModel(r);
+  const dt = (()=>{ const g=(ALL_GAMES||[]).find(x=>x.id===r.game_id); return g ? fmtGameDateTime(g) : {dateLabel: fmtGameDate(r.game_date), timeLabel:'—'}; })();
+  const f1 = x => Number(x).toFixed(1);
+  const fav = m.mHome>=0 ? m.home : m.away;
+  const inp = (id, ph, w, kind) => `<input type="text" inputmode="decimal" id="${id}" placeholder="${ph}" oninput="pgCheck('${kind}')" style="${w?`width:${w}px;`:'flex:1;'} padding:6px 8px; font-size:12.5px;">`;
+  const sel = (id, opts, kind) => `<select id="${id}" onchange="pgCheck('${kind}')" style="padding:6px 4px; font-size:12.5px;">${opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select>`;
+  const block = (title, proj, body) => `<div style="border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px;">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;"><b>${title}</b><span class="ts">${proj}</span></div>${body}</div>`;
+  const teamOpts = [[m.home, m.home],[m.away, m.away]];
+  const final = (r.actual_home_score!=null) ? `<div class="ts" style="margin-top:4px;">Final: ${teamPill(m.away)} ${r.actual_away_score} – ${r.actual_home_score} ${teamPill(m.home)}</div>` : '';
+  document.getElementById('predDetail').innerHTML = `
+    <button class="ghost" onclick="closePredGame()" style="margin-bottom:10px;">← Voltar às previsões</button>
+    <div style="font-size:17px; margin-bottom:2px;">${teamPill(m.away)} @ ${teamPill(m.home)}</div>
+    <div class="ts">${dt.dateLabel} · ${dt.timeLabel} (hora local)</div>${final}
+    <div class="sub" style="margin:10px 0;">Mete a linha e a odd real de cada mercado — a app diz se há valor face à previsão do modelo.</div>
+
+    ${block('Vencedor', `${teamPill(fav)} favorito · ${m.pHome==null?'—':Math.round((m.mHome>=0?m.pHome:1-m.pHome)*100)+'%'}`, `
+      <div style="display:flex; gap:8px; margin-top:8px; align-items:center;"><span style="min-width:44px;">${teamPill(m.home)}</span>${inp('pgWinOddH','odd real',0,'win')}</div><div id="pgWinOutH" style="margin-top:4px;"></div>
+      <div style="display:flex; gap:8px; margin-top:8px; align-items:center;"><span style="min-width:44px;">${teamPill(m.away)}</span>${inp('pgWinOddA','odd real',0,'win')}</div><div id="pgWinOutA" style="margin-top:4px;"></div>`)}
+
+    ${block('Handicap', `${m.mHome>=0?m.home:m.away} −${f1(Math.abs(m.mHome))} / ${m.mHome>=0?m.away:m.home} +${f1(Math.abs(m.mHome))}`, `
+      <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">${sel('pgHcpTeam',teamOpts,'Hcp')}${sel('pgHcpSign',[['-','−'],['+','+']],'Hcp')}${inp('pgHcpLine','linha (3.5)',80,'Hcp')}${inp('pgHcpOdd','odd real',0,'Hcp')}</div><div id="pgHcpOut" style="margin-top:6px;"></div>`)}
+
+    ${block('Total de pontos', `projeção ${f1(m.total)}`, `
+      <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">${sel('pgTotSide',[['over','Over'],['under','Under']],'Tot')}${inp('pgTotLine','linha (226.5)',90,'Tot')}${inp('pgTotOdd','odd real',0,'Tot')}</div><div id="pgTotOut" style="margin-top:6px;"></div>`)}
+
+    ${block('Total por equipa', `${m.home} ${f1(m.sHome)} · ${m.away} ${f1(m.sAway)}`, `
+      <div style="display:flex; gap:6px; margin-top:8px; align-items:center;">${sel('pgTtTeam',teamOpts,'Tt')}${sel('pgTtSide',[['over','Over'],['under','Under']],'Tt')}${inp('pgTtLine','linha (113.5)',90,'Tt')}${inp('pgTtOdd','odd real',0,'Tt')}</div><div id="pgTtOut" style="margin-top:6px;"></div>`)}
+
+    <div style="margin-top:14px;">
+      <button class="primary" style="width:100%;" onclick="askKobeJustifyGame()">💬 Pedir ao Kobe para justificar estas previsões</button>
+      <div id="pgKobeOut" style="margin-top:10px; font-size:13.5px; line-height:1.6; white-space:pre-wrap;"></div>
+    </div>`;
+}
+
+async function askKobeJustifyGame(){
+  const r = PRED_ROWS.find(x=>x.game_id===PRED_OPEN); if(!r) return;
+  const m = pgModel(r);
+  const out = document.getElementById('pgKobeOut');
+  const fav = m.mHome>=0 ? m.home : m.away, dog = m.mHome>=0 ? m.away : m.home;
+  const pFav = m.pHome==null ? null : (m.mHome>=0 ? m.pHome : 1-m.pHome);
+  const f1 = x => Number(x).toFixed(1);
+  let prompt = `Justifica, como um analista a explicar o seu próprio trabalho, as previsões da app para ${m.away} @ ${m.home} (${r.game_date}). Usa os dados que tens (ratings, forma, back-to-back, vantagem de casa, treinadores, transferências, memória da época) para explicar o PORQUÊ de cada mercado — não repitas os números em lista.\n\n`;
+  prompt += `VENCEDOR: ${fav} favorito${pFav!=null?' a '+Math.round(pFav*100)+'%':''}.\n`;
+  prompt += `HANDICAP: ${fav} −${f1(Math.abs(m.mHome))} / ${dog} +${f1(Math.abs(m.mHome))} (margem projetada).\n`;
+  prompt += `TOTAL: ${f1(m.total)} pontos.\n`;
+  prompt += `TOTAL POR EQUIPA: ${m.home} ${f1(m.sHome)}, ${m.away} ${f1(m.sAway)}.\n`;
+  if(r.actual_home_score!=null) prompt += `RESULTADO REAL: ${m.away} ${r.actual_away_score} – ${r.actual_home_score} ${m.home}. Diz também onde o modelo acertou e falhou.\n`;
+  prompt += `\nEscreve um parágrafo curto e separado para cada mercado (Vencedor, Handicap, Total, Total por Equipa), a explicar a lógica e a coerência entre eles, e termina com um alerta de cautela se for caso disso.`;
+  out.textContent = 'O Kobe está a analisar…';
+  try{
+    const {data: {session}} = await sb.auth.getSession();
+    const resp = await fetch('https://vtefsaloivpzkbxthzya.supabase.co/functions/v1/ai-chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer ' + (session ? session.access_token : SUPABASE_ANON_KEY)},
+      body: JSON.stringify({ message: prompt, history: [] })
+    });
+    const data = await resp.json();
+    out.textContent = data.error ? ('Não consegui obter a justificação agora: ' + data.error) : (data.text || '(sem resposta)');
+  }catch(e){ out.textContent = 'Erro de rede ao pedir ao Kobe.'; }
+}
+
 async function loadCalendar(){
   const {data, error} = await sb.from('games').select('*').eq('season', '2026-27').order('game_date').order('game_time', {nullsFirst: false});
   if(error) throw new Error('games: ' + error.message);
   ALL_GAMES = data || [];
   renderCalendar();
   renderUpcomingTicker();
-  renderDailyPicks();
   loadPredictions();
 }
 
