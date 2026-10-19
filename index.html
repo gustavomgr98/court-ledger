@@ -2793,20 +2793,20 @@ function renderPredictions(){
     const icon = r.correct===true ? '✅' : r.correct===false ? '❌' : '⏳';
     const fav = r.favored_team;
     const pf = r.pred_prob_a==null ? null : (fav===r.team_a ? r.pred_prob_a : 1-r.pred_prob_a);
-    const score = (r.actual_home_score!=null && r.actual_away_score!=null) ? `Final: ${away} ${r.actual_away_score} – ${r.actual_home_score} ${r.home_team}` : '';
+    const score = (r.actual_home_score!=null && r.actual_away_score!=null) ? `Final: ${teamPill(away)} ${r.actual_away_score} – ${r.actual_home_score} ${teamPill(r.home_team)}` : '';
     return `<div style="border-left:5px solid ${c}; background:${c}18; border-radius:8px; padding:9px 11px; margin-bottom:8px;">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
         <div>${teamPill(away)} @ ${teamPill(r.home_team)}</div><div style="font-size:18px;">${icon}</div></div>
       <div class="ts" style="margin-top:2px;">${dt.dateLabel} · ${dt.timeLabel}</div>
-      <div style="margin-top:4px; font-size:13px;">Previsão: <b>${fav}</b>${pf!=null?' '+Math.round(pf*100)+'%':''}${r.actual_winner?` · Venceu: <b>${r.actual_winner}</b>`:''}</div>
+      <div style="margin-top:4px; font-size:13px;">Previsão: ${teamPill(fav)}${pf!=null?' <b>'+Math.round(pf*100)+'%</b>':''}${r.actual_winner?` · Venceu: ${teamPill(r.actual_winner)}`:''}</div>
       ${score?`<div class="ts">${score}</div>`:''}
       ${(()=>{ const x = mk(r); if(!x) return '';
         const chip = (lbl, pred, act, ok) => { const col = ok===null ? '#8a8f98' : ok ? '#2fb86a' : '#e5484d';
           return `<span style="display:inline-block; margin:4px 6px 0 0; padding:2px 7px; border-radius:6px; font-size:11.5px; background:${col}22; border:1px solid ${col}77; color:${col};">${lbl} ${pred}${act!=null?' → '+act:''}</span>`; };
         const f1 = v => Number(v).toFixed(1);
         const hm = num(r.pred_margin_home), am = r.actual_margin_home;
-        const mtxt = v => { const fav = v>=0 ? r.home_team : away, dog = v>=0 ? away : r.home_team; return `${fav} −${f1(Math.abs(v))} / ${dog} +${f1(Math.abs(v))}`; };
-        return `<div>${chip('Total', f1(r.pred_total), r.actual_total, x.t)}${chip('Handicap', mtxt(hm), am==null?null:mtxt(num(am)), x.m)}${chip(r.home_team, f1(r.pred_home_score), r.actual_home_score, x.th)}${chip(away, f1(r.pred_away_score), r.actual_away_score, x.ta)}</div>`; })()}
+        const mtxt = v => { const fav = v>=0 ? r.home_team : away, dog = v>=0 ? away : r.home_team; return `${teamPill(fav)} −${f1(Math.abs(v))} / ${teamPill(dog)} +${f1(Math.abs(v))}`; };
+        return `<div>${chip('Total', f1(r.pred_total), r.actual_total, x.t)}${chip('Handicap', mtxt(hm), am==null?null:mtxt(num(am)), x.m)}${chip(teamPill(r.home_team), f1(r.pred_home_score), r.actual_home_score, x.th)}${chip(teamPill(away), f1(r.pred_away_score), r.actual_away_score, x.ta)}</div>`; })()}
     </div>`;
   }).join('');
 }
