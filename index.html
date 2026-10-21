@@ -2882,9 +2882,16 @@ function renderPredictions(){
     tally.t[x.t?0:1]++; tally.m[x.m?0:1]++; [x.th,x.ta].forEach(b=>tally.ts[b?0:1]++); });
   const mrow = (l,a) => `<div style="display:flex; justify-content:space-between; padding:3px 0;"><span>${l}</span><span><b style="color:#2fb86a;">${a[0]}</b> / <b style="color:#e5484d;">${a[1]}</b>${(a[0]+a[1])?` · ${Math.round(a[0]/(a[0]+a[1])*100)}%`:''}</span></div>`;
   const box = (n,l,c) => `<div style="flex:1; text-align:center; padding:10px 6px; border-radius:8px; background:${c}22; border:1px solid ${c}66;"><div style="font-size:22px; font-weight:700; color:${c};">${n}</div><div class="ts">${l}</div></div>`;
-  sum.innerHTML = `<div style="display:flex; gap:8px; margin:12px 0;">${box(hits,'Acertos','#2fb86a')}${box(miss,'Falhas','#e5484d')}${box(pend,'Pendentes','#8a8f98')}${box(pct===null?'—':pct+'%','Taxa de acerto','#5b8def')}</div>
-    <div class="ts" style="margin-bottom:4px;">Por mercado (acertos / falhas) — Total, Handicap e Total por Equipa contam como acerto quando o erro fica dentro de meio desvio-padrão real da liga:</div>
-    <div style="font-size:13px; margin-bottom:12px;">${mrow('Vencedor',[hits,miss])}${mrow('Total de pontos',tally.t)}${mrow('Handicap / margem',tally.m)}${mrow('Total por equipa',tally.ts)}</div>`;
+  const allOk = hits + tally.t[0] + tally.m[0] + tally.ts[0];
+  const allKo = miss + tally.t[1] + tally.m[1] + tally.ts[1];
+  const allPct = (allOk+allKo) ? Math.round(allOk/(allOk+allKo)*100) : null;
+  const mline = (l,a) => { const n=a[0]+a[1]; const pc = n ? Math.round(a[0]/n*100) : null;
+    return `<tr><td>${l}</td><td class="num" style="color:#2fb86a; font-weight:700;">${a[0]}</td><td class="num" style="color:#e5484d; font-weight:700;">${a[1]}</td><td class="num">${pc===null?'—':pc+'%'}</td></tr>`; };
+  sum.innerHTML = `<div style="display:flex; gap:8px; margin:12px 0;">${box(allOk,'Acertos (todos os mercados)','#2fb86a')}${box(allKo,'Falhas','#e5484d')}${box(pend,'Jogos pendentes','#8a8f98')}${box(allPct===null?'—':allPct+'%','Taxa de acerto','#5b8def')}</div>
+    <table style="margin-bottom:6px;"><thead><tr><th>Mercado</th><th>Acertos</th><th>Falhas</th><th>Taxa</th></tr></thead><tbody>
+      ${mline('Vencedor',[hits,miss])}${mline('Total de pontos',tally.t)}${mline('Handicap / margem',tally.m)}${mline('Total por equipa (2 por jogo)',tally.ts)}
+    </tbody></table>
+    <div class="ts" style="margin-bottom:12px;">Vencedor conta acerto direto. Total, Handicap e Total por Equipa contam como acerto quando o erro fica dentro de meio desvio-padrão real da liga.</div>`;
   if(!rows.length){ list.className=''; list.innerHTML='<div class="ts">Ainda sem previsões registadas. São guardadas automaticamente nos 2 dias antes de cada jogo.</div>'; return; }
   list.className='';
   list.innerHTML = rows.map(r=>{
