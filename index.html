@@ -2362,24 +2362,33 @@ async function sendValueCheckToBetForm(){
 }
 
 async function populateBetGameSelect(){
+  // So lista jogos ainda por decidir (agendados ou a decorrer): os que ja terminaram saem sozinhos da lista.
   const sel = document.getElementById('betGameSelect');
-  const today = new Date().toISOString().slice(0,10);
+  if(!sel) return;
+  const prev = sel.value;
   const {data} = await sb.from('games').select('*')
     .eq('season','2026-27')
-    .gte('game_date', new Date(Date.now() - 3*24*3600*1000).toISOString().slice(0,10))
-    .order('game_date').limit(60);
+    .neq('status','final')
+    .gte('game_date', new Date(Date.now() - 1*24*3600*1000).toISOString().slice(0,10))
+    .order('game_date').order('game_time', {nullsFirst:false}).limit(60);
   BET_GAMES = data || [];
-  sel.innerHTML = '<option value="">— escolhe um jogo —</option>' +
-    BET_GAMES.map(g=>`<option value="${g.id}">${fmtGameDateTime(g).dateLabel} · ${g.away_team} @ ${g.home_team}</option>`).join('');
+  const html = '<option value="">— escolhe um jogo —</option>' +
+    BET_GAMES.map(g=>`<option value="${g.id}">${fmtGameDateTime(g).dateLabel} · ${g.away_team} @ ${g.home_team}${g.status==='live'?' (a decorrer)':''}</option>`).join('');
+  if(sel.dataset.sig === html) return; // sem alteracoes: nao mexe na lista (evita fechar o menu aberto)
+  sel.dataset.sig = html;
+  sel.innerHTML = html;
+  if(prev && BET_GAMES.some(g=>String(g.id)===prev)) sel.value = prev;
   onBetGameChange();
 }
 
 function onBetGameChange(){
   const gameId = document.getElementById('betGameSelect').value;
   const teamSel = document.getElementById('betTeam');
+  const prevTeam = teamSel.value;
   const game = BET_GAMES.find(g=>String(g.id)===gameId);
   if(!game){ teamSel.innerHTML = ''; return; }
   teamSel.innerHTML = `<option value="${game.home_team}">${game.home_team} (casa)</option><option value="${game.away_team}">${game.away_team} (fora)</option>`;
+  if(prevTeam === game.home_team || prevTeam === game.away_team) teamSel.value = prevTeam;
 }
 
 function onBetMarketChange(){
@@ -3061,6 +3070,7 @@ async function loadCalendar(){
   renderCalendar();
   renderUpcomingTicker();
   loadPredictions();
+  populateBetGameSelect();
 }
 
 function setupTickerDrag(){
