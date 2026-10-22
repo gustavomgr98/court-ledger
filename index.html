@@ -2903,7 +2903,7 @@ function renderPredictions(){
     <div class="ts" style="margin-bottom:12px;">Vencedor conta acerto direto. Total, Handicap e Total por Equipa contam como acerto quando o erro fica dentro de meio desvio-padrão real da liga.</div>`;
   if(!rows.length){ list.className=''; list.innerHTML='<div class="ts">Ainda sem previsões registadas. São guardadas automaticamente nos 2 dias antes de cada jogo.</div>'; return; }
   list.className='';
-  list.innerHTML = rows.map(r=>{
+  const card = r=>{
     const g = (ALL_GAMES||[]).find(x=>x.id===r.game_id);
     const dt = g ? fmtGameDateTime(g) : {dateLabel: fmtGameDate(r.game_date), timeLabel:'—'};
     const away = r.home_team===r.team_a ? r.team_b : r.team_a;
@@ -2926,7 +2926,28 @@ function renderPredictions(){
         const mtxt = v => { const fav = v>=0 ? r.home_team : away, dog = v>=0 ? away : r.home_team; return `${teamPill(fav)} −${f1(Math.abs(v))} / ${teamPill(dog)} +${f1(Math.abs(v))}`; };
         return `<div>${chip('Total', f1(r.pred_total), r.actual_total, x.t)}${chip('Handicap', mtxt(hm), am==null?null:mtxt(num(am)), x.m)}${chip(teamPill(r.home_team), f1(r.pred_home_score), r.actual_home_score, x.th)}${chip(teamPill(away), f1(r.pred_away_score), r.actual_away_score, x.ta)}</div>`; })()}
     </div>`;
-  }).join('');
+  };
+  // Arquivo: jogos ja decididos com data anterior a ontem ficam num bloco recolhido (os contadores acima contam sempre tudo)
+  const dstr = d => { const x=new Date(d); return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); };
+  const cutoff = dstr(Date.now()-86400000);
+  const isDone = r => r.correct===true || r.correct===false || r.actual_winner!=null;
+  const archived = rows.filter(r=> isDone(r) && r.game_date < cutoff);
+  const active = rows.filter(r=> !archived.includes(r));
+  let html = active.map(card).join('');
+  if(!active.length) html = '<div class="ts" style="margin-bottom:8px;">Sem jogos recentes ou por jogar.</div>';
+  if(archived.length){
+    const ah = archived.filter(r=>r.correct===true).length, am2 = archived.filter(r=>r.correct===false).length;
+    html += `<button type="button" onclick="togglePredArchive()" style="width:100%; margin:6px 0 8px; padding:10px; border-radius:8px; border:1px solid #8a8f9888; background:transparent; color:inherit; cursor:pointer;">🗄️ <span id="predArchLbl">${PRED_ARCH_OPEN?'Esconder':'Mostrar'}</span> jogos arquivados (${archived.length}) · Vencedor ${ah}✅ ${am2}❌</button>`;
+    html += `<div id="predArchive" style="display:${PRED_ARCH_OPEN?'block':'none'};">${archived.slice().reverse().map(card).join('')}</div>`;
+  }
+  list.innerHTML = html;
+}
+let PRED_ARCH_OPEN = false;
+function togglePredArchive(){
+  PRED_ARCH_OPEN = !PRED_ARCH_OPEN;
+  const box = document.getElementById('predArchive'), lbl = document.getElementById('predArchLbl');
+  if(box) box.style.display = PRED_ARCH_OPEN ? 'block' : 'none';
+  if(lbl) lbl.textContent = PRED_ARCH_OPEN ? 'Esconder' : 'Mostrar';
 }
 
 // ===== Pagina de jogo (Previsoes): odds reais + valor + Kobe =====
